@@ -412,13 +412,15 @@ explainer.
 A `Result` is a variant type that can hold either a success (`Ok`) value or an error (`Err`) value.
 The types of the `Ok` and `Err` variants are generic:
 
+<script type="preformatted">
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
-    pub enum Result<&#xFEFF;T, E> {
+    pub enum Result<T, E> {
         Ok(T),
         Err(E),
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     [Figure [rust-result]: The `Result` type]
+</script>
 
 `T` and `E` can be any type. It's common for a library to define its own error types to represent
 various error conditions.
@@ -447,8 +449,9 @@ and perhaps return an entirely new error. For example:
 Rust provides the `?` operator to automatically unpack a `Result` and return early if it holds an
 error. A Rust version of the C program above could be written like this:
 
+<script type="preformatted">
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
-    fn function_with_result() -> Result<&#xFEFF;Foo, FooError> {...}
+    fn function_with_result() -> Result<Foo, FooError> {...}
 
     fn caller() -> Result<(), FooError> {
         let foo: Foo = function_with_result()?;
@@ -458,14 +461,16 @@ error. A Rust version of the C program above could be written like this:
         Ok(())
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+</script>
 
 If `function_with_result()` returns an error, the `?` operator will cause `caller` to return and
 propagate the error value. This works as long as `caller` and `function_with_result` either return
 the same error type or types with a known conversion. There are various other ways to handle an
 error:
 
+<script type="preformatted">
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
-    fn function_with_result() -> Result<&#xFEFF;Foo, FooError> {...}
+    fn function_with_result() -> Result<Foo, FooError> {...}
 
     fn caller() -> Result<(), FooError> {
         ...
@@ -488,6 +493,7 @@ error:
         Ok(())
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+</script>
 
 I like to keep things simple in my code examples and use the `?` operator. Instead of defining
 custom error types and conversions, I use a catch all `Error` type from a library called *anyhow*.
@@ -748,8 +754,9 @@ code.[^ch3-footnote2]
 
 Let's define the vertex and fragment functions, which I'm calling `display_vs` and `display_fs`:
 
+<script type="preformatted">
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Swift highlight
-    alias TriangleVertices = array<&#xFEFF;vec2f, 3>;
+    alias TriangleVertices = array<vec2f, 3>;
     var<private> vertices: TriangleVertices = TriangleVertices(
       vec2f(-0.5, -0.5),
       vec2f( 0.5, -0.5),
@@ -765,6 +772,7 @@ Let's define the vertex and fragment functions, which I'm calling `display_vs` a
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     [Listing [vertex-and-fragment-shaders]: <kbd>[shaders.wgsl]</kbd> Vertex and Fragment shaders]
+</script>
 
 I'm using the "vs" and "fs" suffixes as shorthand for "vertex stage" and "fragment stage". Together,
 these two functions form our "display pipeline" (the "display" part will become more clear later).
@@ -1059,14 +1067,15 @@ setting the 4 corners of the rectangle to $(-1, 1)$, $(1, 1)$, $(1, -1)$, $(-1, 
 the entire viewport regardless of its dimensions.
 
 
+<script type="preformatted">
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Swift delete 
-    alias TriangleVertices = array<&#xFEFF;vec2f, 3>;
+    alias TriangleVertices = array<vec2f, 3>;
     var<private> vertices: TriangleVertices = TriangleVertices(
       vec2f(-0.5, -0.5),
       vec2f( 0.5, -0.5),
       vec2f( 0.0,  0.5),
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Swift highlight
-    alias TriangleVertices = array<&#xFEFF;vec2f, 6>;
+    alias TriangleVertices = array<vec2f, 6>;
     var<private> vertices: TriangleVertices = TriangleVertices(
       vec2f(-1.0,  1.0),
       vec2f(-1.0, -1.0),
@@ -1086,6 +1095,7 @@ the entire viewport regardless of its dimensions.
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     [Listing [quad-vertices]: <kbd>[shaders.wgsl]</kbd> Full-Screen Quad Vertices]
+</script>
 
 
   ![Figure [half-screen-quad]: Half-Screen Triangle](../images/img-03-half-screen-quad.png)
@@ -1377,7 +1387,7 @@ C/C++ struct:
 
 Now, let's allocate the backing buffer object and initialize its contents:
 
-
+<script type="preformatted">
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
     use bytemuck::{Pod, Zeroable};
 
@@ -1421,7 +1431,7 @@ Now, let's allocate the backing buffer object and initialize its contents:
             };
             let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("uniforms"),
-                size: std::mem::size_of::<&#xFEFF;Uniforms>() as u64,
+                size: std::mem::size_of::<Uniforms>() as u64,
                 usage: wgpu::BufferUsages::UNIFORM,
                 mapped_at_creation: true,
             });
@@ -1446,6 +1456,7 @@ Now, let's allocate the backing buffer object and initialize its contents:
         ...
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     [Listing [uniforms-struct-cpu]: <kbd>[render.rs]</kbd> Uniform buffer object initialization]
+</script>
 
 This code allocates a buffer resource that is large enough to store an instance of `Uniforms` and
 copies the contents of `uniforms` into it. The buffer is mapped at creation so that its address
@@ -1636,6 +1647,7 @@ of $t$ represent points behind the origin, and $t=0$ is the same as the origin.
 Let's define the data structure to represent a ray:
 
 
+<script type="preformatted">
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Swift
     struct Uniforms {
       width: u32,
@@ -1652,10 +1664,11 @@ Let's define the data structure to represent a ray:
 
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Swift
-    alias TriangleVertices = array<&#xFEFF;vec2f, 6>;
+    alias TriangleVertices = array<vec2f, 6>;
     ...
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     [Listing [ray-struct]: <kbd>[shaders.wgsl]</kbd> Ray structure]
+</script>
 
 
 Let's now model a simple pinhole camera. Initially we'll the define the eye position (where the
@@ -1951,11 +1964,12 @@ Let's declare the scene with a second (large) sphere that serves as the "ground"
 sphere will sit. We can declare the array as a private global, like we did for the vertices of the
 full-screen quad:
 
+<script type="preformatted">
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Swift
     ...
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Swift highlight
     const OBJECT_COUNT: u32 = 2;
-    alias Scene = array<&#xFEFF;Sphere, OBJECT_COUNT>;
+    alias Scene = array<Sphere, OBJECT_COUNT>;
     var<private> scene: Scene = Scene(
       Sphere(/*center*/ vec3(0., 0., -1.), /*radius*/ 0.5),
       Sphere(/*center*/ vec3(0., -100.5, -1.), /*radius*/ 100.),
@@ -1963,7 +1977,7 @@ full-screen quad:
 
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Swift
-    alias TriangleVertices = array<&#xFEFF;vec2f, 6>;
+    alias TriangleVertices = array<vec2f, 6>;
     var<private> vertices: TriangleVertices = TriangleVertices(
       vec2f(-1.0,  1.0),
       vec2f(-1.0, -1.0),
@@ -1975,6 +1989,7 @@ full-screen quad:
     ...
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     [Listing [scene-array]: <kbd>[shaders.wgsl]</kbd> Hard-coded scene declaration]
+</script>
 
 
 The scene traversal code is straightforward: loop through the scene array and keep track of the
@@ -1983,12 +1998,13 @@ initialize $t$ with a value that is larger than all other possible values. Since
 floating-point numbers, _infinity_ is a suitable initial value. However, since WGSL doesn't quite
 support infinities[^ch5-footnote4], I'll use the largest representable `f32` value as a substitute:
 
+<script type="preformatted">
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Swift highlight
     const FLT_MAX: f32 = 3.40282346638528859812e+38;
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Swift
     ...
     const OBJECT_COUNT: u32 = 2;
-    alias Scene = array<&#xFEFF;Sphere, OBJECT_COUNT>;
+    alias Scene = array<Sphere, OBJECT_COUNT>;
     var<private> scene: Scene = Scene(
       Sphere(/*center*/ vec3(0., 0., -1.), /*radius*/ 0.5),
       Sphere(/*center*/ vec3(0., -100.5, -1.), /*radius*/ 100.),
@@ -2026,6 +2042,7 @@ support infinities[^ch5-footnote4], I'll use the largest representable `f32` val
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     [Listing [single-sphere]: <kbd>[shaders.wgsl]</kbd> Simple scene traversal]
+</script>
 
 
 This should result in the following image:
@@ -2507,6 +2524,7 @@ we need to do. As long as we call `write_buffer` before encoding any other GPU c
 the copy destination (i.e. our uniform buffer) on the same queue, the copy is guaranteed
 to complete before the shader runs and reads from the buffer:
 
+<script type="preformatted">
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
     ...
     #[derive(Copy, Clone, Pod, Zeroable)]
@@ -2558,6 +2576,7 @@ to complete before the shader runs and reads from the buffer:
             ...
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     [Listing [queue-write-buffer]: <kbd>[render.rs]</kbd> Updating the uniform buffer every frame]
+</script>
 
 
 That's pretty much it. Since the new code always updates the uniform buffer before a GPU submission
