@@ -71,6 +71,9 @@ var<private> scene: Scene = Scene(
   Sphere(/*center*/ vec3(0., -100.5, -1.), /*radius*/ 100.),
 );
 
+@group(0) @binding(1) var radiance_samples_old: texture_2d<f32>;
+@group(0) @binding(2) var radiance_samples_new: texture_storage_2d<rgba32float, write>;
+
 alias TriangleVertices = array<vec2f, 6>;
 var<private> vertices: TriangleVertices = TriangleVertices(
   vec2f(-1.0,  1.0),
@@ -107,8 +110,26 @@ var<private> vertices: TriangleVertices = TriangleVertices(
       closest_hit = hit;
     }
   }
+
+  var radiance_sample: vec3f;
   if closest_hit.t < FLT_MAX {
-    return vec4(0.5 * closest_hit.normal + vec3(0.5), 1.);
+    radiance_sample = vec3(0.5 * closest_hit.normal + vec3(0.5));
+  } else {
+    radiance_sample = sky_color(ray);
   }
-  return vec4(sky_color(ray), 1.);
+
+  // Fetch the old sum of samples.
+  var old_sum: vec3f;
+  if uniforms.frame_count > 1 {
+    old_sum = textureLoad(radiance_samples_old, vec2u(pos.xy), 0).xyz;
+  } else {
+    old_sum = vec3(0.);
+  }
+
+  // Compute and store the new sum.
+  let new_sum = radiance_sample + old_sum;
+  textureStore(radiance_samples_new, vec2u(pos.xy), vec4(new_sum, 0.));
+
+  // Display the average.
+  return vec4(new_sum / f32(uniforms.frame_count), 1.);
 }

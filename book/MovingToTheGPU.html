@@ -2253,10 +2253,10 @@ statement (why needlessly evaluate both branches after all?):
 
 This is perfectly fine and will behave in the same way. In fact, it's possible that this will
 compile down to the exact same GPU instructions as the version with `select`. GPUs are generally not
-good at handling conditional branches in code without sacrificing some amount of parallelism and a
-shader compiler may decide to eliminate branches altogether for simple statements like these.
-Writing efficient GPU code requires a good understanding of how GPUs deal with divergent control flow
--- a topic that we will discuss more later on.
+good at handling conditional branches in code without sacrificing some amount of parallelism (though
+this depends on several factors). A good shader compiler will often eliminate branches altogether
+for simple conditionals like these. Writing efficient GPU code requires a good understanding of how
+GPUs deal with divergent control flow -- a topic that we will discuss more later on.
 
 Let's update the fragment shader to make use of the new data structure. Let's also change our
 shading code to visualize the normal vector by mapping the coordinates (from the $[-1, 1]$ range)
@@ -2571,7 +2571,8 @@ to complete before the shader runs and reads from the buffer:
         pub fn render_frame(&mut self, target: &wgpu::TextureView) {
             self.uniforms.frame_count += 1;
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
-            self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&self.uniforms));
+            self.queue
+                .write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&self.uniforms));
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
             ...
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2890,9 +2891,9 @@ binding (the updated sums):
     [Listing [updated-pipeline-layout]: <kbd>[render.rs]</kbd> Updated bind group layout]
 
 
-Now we need to change the actual bind group object to match the new layout. We want to alternate the
-texture assignments but a bind group cannot be modified once it's created. We could instead create
-two bind groups with the textures swapped and alternate those at render time:
+Next, we need to change the actual bind group object to match the new layout. We want to alternate
+the texture assignments but a bind group cannot be modified once it's created. We could instead
+create two bind groups with the textures swapped and alternate those at render time:
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
     ...
@@ -3037,14 +3038,154 @@ two bind groups with the textures swapped and alternate those at render time:
     [Listing [textures-bind-groups]:
      <kbd>[render.rs]</kbd> Bind groups with different texture assignments]
 
+Now, let's update the shader:
 
+<script type="preformatted">
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Swift
+    ...
+    const OBJECT_COUNT: u32 = 2;
+    alias Scene = array<Sphere, OBJECT_COUNT>;
+    var<private> scene: Scene = Scene(
+      Sphere(/*center*/ vec3(0., 0., -1.), /*radius*/ 0.5),
+      Sphere(/*center*/ vec3(0., -100.5, -1.), /*radius*/ 100.),
+    );
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Swift highlight
+    @group(0) @binding(1) var radiance_samples_old: texture_2d<f32>;
+    @group(0) @binding(2) var radiance_samples_new: texture_storage_2d<rgba32float, write>;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Swift
+    ...
+    @fragment fn display_fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+      let origin = vec3(0.);
+      let focus_distance = 1.;
+      let aspect_ratio = f32(uniforms.width) / f32(uniforms.height);
+
+      // Normalize the viewport coordinates.
+      var uv = pos.xy / vec2f(f32(uniforms.width - 1u), f32(uniforms.height - 1u));
+
+      // Map `uv` from y-down (normalized) viewport coordinates to camera coordinates.
+      uv = (2. * uv - vec2(1.)) * vec2(aspect_ratio, -1.);
+
+      let direction = vec3(uv, -focus_distance);
+      let ray = Ray(origin, direction);
+      var closest_hit = Intersection(vec3(0.), FLT_MAX);
+      for (var i = 0u; i < OBJECT_COUNT; i += 1u) {
+        var sphere = scene[i];
+        sphere.radius += sin(f32(uniforms.frame_count) * 0.02) * 0.2;
+        let hit = intersect_sphere(ray, sphere);
+        if hit.t > 0. && hit.t < closest_hit.t {
+          closest_hit = hit;
+        }
+      }
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Swift highlight
+      var radiance_sample: vec3f;
+      if closest_hit.t < FLT_MAX {
+        radiance_sample = vec3(0.5 * closest_hit.normal + vec3(0.5));
+      } else {
+        radiance_sample = sky_color(ray);
+      }
+
+      // Fetch the old sum of samples.
+      var old_sum: vec3f;
+      if uniforms.frame_count > 1 {
+        old_sum = textureLoad(radiance_samples_old, vec2u(pos.xy), 0).xyz;
+      } else {
+        old_sum = vec3(0.);
+      }
+
+      // Compute and store the new sum.
+      let new_sum = radiance_sample + old_sum;
+      textureStore(radiance_samples_new, vec2u(pos.xy), vec4(new_sum, 0.));
+
+      // Display the average.
+      return vec4(new_sum / f32(uniforms.frame_count), 1.);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Swift
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [sample-accumulation]: <kbd>[shaders.wgsl]</kbd> Sample accumulation]
+</script>
+
+The intersection test logic remains the same as before but instead of returning the computed
+radiance value right away, we first store it in a local variable (`radiance_sample`). Next we fetch
+the current tally from the "old" texture (`old_sum`) and compute the updated tally by adding
+`radiance_sample` to it. We want to ensure that the accumulation starts as 0, so we set `old_sum`
+to `vec3(0)` for the initial frame (when `frame_count` is equal to $1$). Then simply return
+`new_sum / f32(uniform.frame_count)`, i.e. the current average, in the RGB channels of the output
+color.[^ch6-footnote9]
+
+Finally, let's update the bind group assignment in `PathTracer::render_frame` to ping-pong between
+the two bind groups we created, using even and odd values of `frame_count` as a toggle:
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+    ...
+    impl PathTracer {
+        ...
+        pub fn render_frame(&mut self, target: &wgpu::TextureView) {
+            self.uniforms.frame_count += 1;
+            self.queue
+                .write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&self.uniforms));
+
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("render frame"),
+                });
+
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("display pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                ..Default::default()
+            });
+
+            render_pass.set_pipeline(&self.display_pipeline);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
+            render_pass.set_bind_group(
+                0,
+                &self.display_bind_groups[(self.uniforms.frame_count % 2) as usize],
+                &[],
+            );
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+
+            // Draw 1 instance of a polygon with 6 vertices
+            render_pass.draw(0..6, 0..1);
+
+            // End the render pass by consuming the object.
+            drop(render_pass);
+
+            let command_buffer = encoder.finish();
+            self.queue.submit(Some(command_buffer));
+        }
+    }
+    ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [ping-pong-bind-groups]: <kbd>[render.rs]</kbd> Ping-pong bind groups]
+
+When you run the code now, you should see the animation from before but the displayed image should
+look a bit smudgy. You should be able to see the oscillating sphere leave behind a "smear" over the
+first few seconds and the image should eventually settle at something like this:
+
+  ![Figure [temporal-blur-effect]: Temporal Blur Effect](../images/img-12-blurred-animation.png)
 
 [^ch6-footnote7]: We are making the assumption that light travels along straight lines.
 
 [^ch6-footnote8]: wgpu supports a
 [read/write access mode](https://docs.rs/wgpu/0.19.3/wgpu/enum.StorageTextureAccess.html#variant.ReadWrite)
 which is hidden behind the adapter feature `TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES`. This isn't
-guaranteed to be supported on all platforms but feel free use it if your GPU supports it.
+guaranteed to be supported by all GPUs but feel free use it if yours does.
+
+[^ch6-footnote9]: Note that the value we store in the texture (`vec4(new_sum, 0.)`) has its alpha
+component set to $0$. We aren't making use of the alpha values so it doesn't matter what we set
+this to.
+
 
 
                                (insert acknowledgments.md.html here)
