@@ -3233,7 +3233,7 @@ by each surface.
 
 Casting a single camera ray returns only a point sample but averaging multiple _sub-pixel_ samples
 can give us an approximation of the whole area. Let's try a very simple approach first: subdivide a
-pixel into a rectangular grid and on each frame cast the ray towards one of the regions of the grid.
+pixel into a rectangular grid and on each frame cast the ray towards one of the sub-regions.
 The following code change adds a small offset to the ray which cycles through the sub-regions of a
 4x4 grid centered at the original ray direction, using `uniforms.frame_count` like an index. The
 offsets range within $[-0.5, 0.5]$ in both coordinate directions:
@@ -3264,20 +3264,166 @@ offsets range within $[-0.5, 0.5]$ in both coordinate directions:
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     [Listing [16-sample-aa]: <kbd>[shaders.wgsl]</kbd> 16 grid samples]
 
-  ![Figure [aliased-boundaries]: Anti-aliased with 16 samples @ 400x300
+  ![Figure [16-sample-aa-aliased-boundaries]: Anti-aliasing with 16 regularly-spaced samples @ 400x300
    ](../images/img-14-16-sample-aa.png height="500px")
 
-That's an improvement but we can do better. Instead of subdividing the pixel into 16 discrete
-regions (which still suffers from the same blocky artifact), let's offset the ray by a random amount
-within the same range. We should be able to accumulate enough samples from the majority of the pixel
-area over time to get a better estimate of the average color.
+That's an improvement but we can do better. Instead of subdividing the pixel into 16
+regularly-spaced discrete regions (which is prone to the same sampling artifact), let's offset the
+ray by a random amount within that range. This should accumulate enough samples from various parts
+of the pixel area over time to yield a better estimate of the average color. Plus, why limit
+ourselves to only 16 discrete samples when our renderer is already set up for an indefinite
+amount?
+
+PRNG
+----
+Shading languages don't provide a built-in facility to generate random numbers, which means we need
+to implement our own.
+
+A class of pseudorandom number generators that is very easy to implement is called _Xorshift
+RNGs_.[^marsaglia] Xorshift generators work by repeatedly computing the bitwise exclusive-or of an
+initial seed with a bit-shifted version of itself. The result is a deterministic sequence with a
+uniform distribution and a long period that suits our needs.[^ch6-footnote10]
+
+We can implement the RNG as a private variable such that each GPU thread gets its own local instance
+of the RNG state. We generally want to seed the RNG such that the pseudorandom sequence for a pixel
+is different across successive frames since we want to sample a different sub-pixel coordinate
+each time. The sequences should also ideally differ across adjacent pixels in a single frame
+(instead of repeating the same spatial pattern) in order to improve the sampling distribution. We
+can combine `uniforms.frame_count` with the pixel's coordinates using a hash function to obtain a
+good initial seed for each thread. I use the _One-at-a-Time Hash_ function from Bob Jenkins'
+Dr Dobbs article from 1997[^jenkins] but you could use any other hash function as long as it's fast
+and has good statistical properties.
+
+The following listing defines the RNG state, the hash function, and the 32-bit xorshift.
+`init_rng()` initializes the state with the seed. The RNG state and the generated numbers are 32-bit
+unsigned integers. Since we're pretty much only dealing with floating-point numbers, the code
+includes a `rand_f32()` function that generates and converts a random `u32` to a `f32` between $0$
+and $1$:
+
+<script type="preformatted">
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+    ...
+    struct Uniforms {
+      width: u32,
+      height: u32,
+      frame_count: u32,
+    }
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL highlight
+    struct Rng {
+      state: u32,
+    };
+    var<private> rng: Rng;
+
+    fn init_rng(pixel: vec2u) {
+      // Seed the PRNG using the scalar index of the pixel and the current frame count.
+      let seed = (pixel.x + pixel.y * uniforms.width) ^ jenkins_hash(uniforms.frame_count);
+      rng.state = jenkins_hash(seed);
+    }
+
+    // A slightly modified version of the "One-at-a-Time Hash" function by Bob Jenkins.
+    // See https://www.burtleburtle.net/bob/hash/doobs.html
+    fn jenkins_hash(i: u32) -> u32 {
+      var x = i;
+      x += x << 10u;
+      x ^= x >> 6u;
+      x += x << 3u;
+      x ^= x >> 11u;
+      x += x << 15u;
+      return x;
+    }
+
+    // The 32-bit "xor" function from Marsaglia G., "Xorshift RNGs", Section 3.
+    fn xorshift32() -> u32 {
+      var x = rng.state;
+      x ^= x << 13;
+      x ^= x >> 17;
+      x ^= x << 5;
+      rng.state = x;
+      return x;
+    }
+
+    // Returns a random float in the range [0...1]. This sets the floating point exponent to zero and
+    // sets the most significant 23 bits of a random 32-bit unsigned integer as the mantissa. That
+    // generates a number in the range [1, 1.9999999], which is then mapped to [0, 0.9999999] by
+    // subtraction. See Ray Tracing Gems II, Section 14.3.4.
+    fn rand_f32() -> f32 {
+      return bitcast<f32>(0x3f800000u | (xorshift32() >> 9u)) - 1.;
+    }
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+    struct Intersection {
+      normal: vec3f,
+      t: f32,
+    }
+    ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [prng-utils]: <kbd>[shaders.wgsl]</kbd> Shader PRNG utilities]
+</script>
+
+Now to change the offset computation in the fragment shader to pick a random coordinate:
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+    ...
+    @fragment fn display_fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL highlight
+      init_rng(vec2u(pos.xy));
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+      let origin = vec3(0.);
+      let focus_distance = 1.;
+      let aspect_ratio = f32(uniforms.width) / f32(uniforms.height);
+
+
+      // Offset and normalize the viewport coordinates of the ray.
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL highlight
+      let offset = vec2(rand_f32() - 0.5, rand_f32() - 0.5);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+      var uv = (pos.xy + offset) / vec2f(f32(uniforms.width - 1u), f32(uniforms.height - 1u));
+
+      // Map `uv` from y-down (normalized) viewport coordinates to camera coordinates.
+      uv = (2. * uv - vec2(1.)) * vec2(aspect_ratio, -1.);
+
+      let direction = vec3(uv, -focus_distance);
+      ...
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [randomized-ssaa-code]: <kbd>[shaders.wgsl]</kbd> 16 grid samples]
+
+
+Now, the anti-aliased edges have a much more gradual transition and look a lot less blocky compared
+to our previous 16-sample AA:
+
+  ![Figure [randomized-ssaa-image]: Randomized sub-pixel supersampling @ 400x300
+   ](../images/img-15-random-subpixel-samples.png height="500px")
+
+We have successfully employed random sampling to compute the average color of visible surfaces
+within a single pixel. Next, we are going to apply the same tools to approximate the radiance that
+flows into the pixel from the scene.
+
+[^ch6-footnote10]: The random offsets generated with xorshift follow a _white noise_ pattern in that
+they appear to be "purely random": the sample points may appear clumped together in some places and
+have large gaps in others. A more even spatial distribution of points (such as _blue noise_ or the
+_Sobol sequence_) can be more desirable for stochastic methods but the Xorshift PRNG is good enough
+for our purposes.
 
                                (insert acknowledgments.md.html here)
 
 References
 ==========
 [^foley-vandam]: J.F. Hughes, A. van Dam, M. McGuire, D.F. Sklar, J.D. Foley, S.K. Feiner, K. Akeley *Computer Graphics: Principles and Practice, 3rd Edition, Section 1.6*
+
 [^ericson]: C. Ericson, Real Time Collision Detection
+
+[^mcguire-codex]: https://graphicscodex.courses.nvidia.com/app.html
+
+[^marsaglia]: George Marsaglia, Xorshift RNGs: https://www.jstatsoft.org/article/download/v008i14/916
+
+[^jenkins]: https://www.burtleburtle.net/bob/hash/doobs.html
 
 [Arman Uguray]:       https://github.com/armansito
 [Steve Hollasch]:     https://github.com/hollasch
