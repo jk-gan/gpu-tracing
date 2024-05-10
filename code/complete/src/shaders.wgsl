@@ -93,8 +93,12 @@ var<private> vertices: TriangleVertices = TriangleVertices(
   let focus_distance = 1.;
   let aspect_ratio = f32(uniforms.width) / f32(uniforms.height);
 
-  // Normalize the viewport coordinates.
-  var uv = pos.xy / vec2f(f32(uniforms.width - 1u), f32(uniforms.height - 1u));
+  // Offset and normalize the viewport coordinates of the ray.
+  let offset = vec2(
+      f32(uniforms.frame_count % 4) * 0.25 - 0.5,
+      f32((uniforms.frame_count % 16) / 4) * 0.25 - 0.5
+  );
+  var uv = (pos.xy + offset) / vec2f(f32(uniforms.width - 1u), f32(uniforms.height - 1u));
 
   // Map `uv` from y-down (normalized) viewport coordinates to camera coordinates.
   uv = (2. * uv - vec2(1.)) * vec2(aspect_ratio, -1.);
@@ -103,8 +107,7 @@ var<private> vertices: TriangleVertices = TriangleVertices(
   let ray = Ray(origin, direction);
   var closest_hit = Intersection(vec3(0.), FLT_MAX);
   for (var i = 0u; i < OBJECT_COUNT; i += 1u) {
-    var sphere = scene[i];
-    sphere.radius += sin(f32(uniforms.frame_count) * 0.02) * 0.2;
+    let sphere = scene[i];
     let hit = intersect_sphere(ray, sphere);
     if hit.t > 0. && hit.t < closest_hit.t {
       closest_hit = hit;

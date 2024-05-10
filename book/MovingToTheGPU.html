@@ -680,8 +680,8 @@ for each fragment. Shading techniques such as texture mapping and lighting are u
 in this stage. The output then goes through several other operations  before getting written to the
 render target as pixels.[^ch3-footnote1]
 
-  ![Figure [render-pipeline]:
-    Vertex and Fragment stages of the render pipeline](../images/fig-01-render-pipeline.svg)
+  ![Figure [render-pipeline]: Vertex and Fragment stages of the render pipeline
+   ](../images/fig-01-render-pipeline.svg)
 
 What I just described is very much a data pipeline: a data stream goes through a series of
 transformations in stages. The input to each stage is defined in terms of smaller elements (e.g.
@@ -3189,7 +3189,88 @@ guaranteed to be supported by all GPUs but feel free use it if yours does.
 component set to $0$. We aren't making use of the alpha values so it doesn't matter what we set
 this to.
 
+Antialiasing
+------------
+Let's undo the animation and bring back the static spheres.
 
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+    ...
+    @fragment fn display_fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+      ...
+      let direction = vec3(uv, -focus_distance);
+      let ray = Ray(origin, direction);
+      var closest_hit = Intersection(vec3(0.), FLT_MAX);
+      for (var i = 0u; i < OBJECT_COUNT; i += 1u) {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL highlight
+        let sphere = scene[i];
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL delete
+        var sphere = scene[i];
+        sphere.radius += sin(f32(uniforms.frame_count) * 0.02) * 0.2;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+        let hit = intersect_sphere(ray, sphere);
+        if hit.t > 0. && hit.t < closest_hit.t {
+          closest_hit = hit;
+        }
+      }
+
+      var radiance_sample: vec3f;
+      ...
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [stop-animating]: <kbd>[shaders.wgsl]</kbd> Remove radius animation]
+
+The output should be the same still image from the end of Chapter 5 (Figure 20). The
+accumulation logic has no effect because every sample is computing exactly the same value.
+Let's zoom in and take a closer look at the edges of the spheres:
+
+  ![Figure [aliased-boundaries]: Aliased shape boundaries @ 400x300
+   ](../images/img-13-aliased-boundaries.png height="500px")
+
+Here, each pixel is visualized as a square. A discrete pixel can only display a single color but
+pixels along shape boundaries overlap multiple (continuous) surfaces. Ideally the pixel color
+should receive a contribution from all of those surfaces, in proportion to the "pixel area" covered
+by each surface.
+
+Casting a single camera ray returns only a point sample but averaging multiple _sub-pixel_ samples
+can give us an approximation of the whole area. Let's try a very simple approach first: subdivide a
+pixel into a rectangular grid and on each frame cast the ray towards one of the regions of the grid.
+The following code change adds a small offset to the ray which cycles through the sub-regions of a
+4x4 grid centered at the original ray direction, using `uniforms.frame_count` like an index. The
+offsets range within $[-0.5, 0.5]$ in both coordinate directions:
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+    ...
+    @fragment fn display_fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+      let origin = vec3(0.);
+      let focus_distance = 1.;
+      let aspect_ratio = f32(uniforms.width) / f32(uniforms.height);
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL highlight
+      // Offset and normalize the viewport coordinates of the ray.
+      let offset = vec2(
+          f32(uniforms.frame_count % 4) * 0.25 - 0.5,
+          f32((uniforms.frame_count % 16) / 4) * 0.25 - 0.5
+      );
+      var uv = (pos.xy + offset) / vec2f(f32(uniforms.width - 1u), f32(uniforms.height - 1u));
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+
+      // Map `uv` from y-down (normalized) viewport coordinates to camera coordinates.
+      uv = (2. * uv - vec2(1.)) * vec2(aspect_ratio, -1.);
+
+      let direction = vec3(uv, -focus_distance);
+      ...
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [16-sample-aa]: <kbd>[shaders.wgsl]</kbd> 16 grid samples]
+
+  ![Figure [aliased-boundaries]: Anti-aliased with 16 samples @ 400x300
+   ](../images/img-14-16-sample-aa.png height="500px")
+
+That's an improvement but we can do better. Instead of subdividing the pixel into 16 discrete
+regions (which still suffers from the same blocky artifact), let's offset the ray by a random amount
+within the same range. We should be able to accumulate enough samples from the majority of the pixel
+area over time to get a better estimate of the average color.
 
                                (insert acknowledgments.md.html here)
 
