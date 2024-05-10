@@ -99,10 +99,14 @@ div.indented {
     background: #e4e4e0;
 }
 
-/* Hilight.js Syntax Coloring */
+/* Highlight.js Syntax Coloring */
 
-.hljs-built_in, .hljs-params, .hljs-type, .hljs-literal {
-    color: #222;
+.hljs-built_in {
+    color: #2356FF;
+}
+
+.hljs-params, .hljs-type, .hljs-literal {
+    color: #a62;
 }
 
 .hljs-comment {
@@ -123,6 +127,14 @@ div.indented {
 
 .hljs-function .hljs-title {
     font-weight: normal;
+}
+
+.hljs-title.function_ {
+    color: #147379;
+}
+
+.hljs-title.function_.invoke__ {
+    color: #147379;
 }
 
 .hljs-number {
@@ -157,6 +169,13 @@ div.indented {
 ** -----------------------------------------------------------------------------------------------*/
 
 .md img {
+    margin-top: 1.0em;
+    width: 72ex;
+    //image-rendering: crips-edges;
+    image-rendering: pixelated;
+}
+
+.md video {
     margin-top: 1.0em;
     width: 72ex;
 }
