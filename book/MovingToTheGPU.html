@@ -659,7 +659,7 @@ Now that we have the skeleton in place, it's time to paint some pixels on the sc
 Display Pipeline
 ----------------
 Before setting up the render pass let's first talk about how it works. Traditionally, graphics
-systems have been modeled after an abstraction called the *graphics pipeline*.[^foley-vandam] At a
+systems have been modeled after an abstraction called the *graphics pipeline*.[#Hughes13] At a
 very high level, the input to the pipeline is a mathematical model that describes what to draw
 -- such as geometry, materials, and light -- and the output is a 2D grid of pixels. This
 transformation is processed in a series of standard *pipeline stages* which form the basis of the
@@ -1193,8 +1193,8 @@ to `vec2f(pos.x / f32(WIDTH - 1u), pos.y / f32(HEIGHT - 1u))`.
 Now we are able to separately color each individual pixel. Running this should produce a picture
 that looks like this:
 
-  ![Figure [viewport-gradient]:
-    Viewport Coordinates as a color gradient](../images/img-05-viewport-gradient.png)
+  ![Figure [viewport-gradient]: Viewport Coordinates as a color gradient
+   ](../images/img-05-viewport-gradient.png)
 
 
 Resource Bindings
@@ -1850,8 +1850,8 @@ real solution where the ray tangentially intersects the sphere at that point. If
 positive, then there are two real solutions and thus two potential intersections that we need to
 consider.
 
-  ![Figure [ray-sphere-solutions]:
-    Different cases of ray-sphere intersection](../images/fig-06-ray-sphere-solutions.svg)
+  ![Figure [ray-sphere-solutions]: Different cases of ray-sphere intersection
+   ](../images/fig-06-ray-sphere-solutions.svg)
 
 We are looking for the first visible surface in the ray's "line of sight", so when there are two
 possible intersections it makes sense to choose the one that's closer to the ray's origin and lies
@@ -1943,7 +1943,6 @@ enough away from the view origin so that the camera doesn't fall inside the sphe
 This should render a solid circle that looks like this:
 
   ![Figure [yellow-circle]: A solid circle](../images/img-07-solid-circle.png)
-
 
 
 [^ch5-footnote3]: This equation has an intuitive geometric interpretation. $\mathbf{X} - \mathbf{C}$
@@ -2116,8 +2115,8 @@ brighter with increasing depth:
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     [Listing [shading-using-depth-alt]: <kbd>[shaders.wgsl]</kbd> Another way to shade with depth]
 
-  ![Figure [depth-shaded-spheres-gray]:
-    Spheres shaded by depth (gray)](../images/img-10-depth-shaded-spheres-gray.png)
+  ![Figure [depth-shaded-spheres-gray]: Spheres shaded by depth (gray)
+   ](../images/img-10-depth-shaded-spheres-gray.png)
 
 
 [^ch5-footnote4]: [WGSL W3C Working Draft, §14.6. Floating Point Evaluation](https://www.w3.org/TR/WGSL/#floating-point-evaluation)
@@ -2150,8 +2149,8 @@ radius $r$ is simply given by
   $$ \vec{\mathbf{N}} = \dfrac{\mathbf{X} - \mathbf{C}}{||\mathbf{X} - \mathbf{C}||}
      = \dfrac{\mathbf{X} - \mathbf{C}}{r} $$
 
-  ![Figure [sphere-normal]:
-    Computing the normal on a sphere](../images/fig-08-sphere-normal.svg)
+  ![Figure [sphere-normal]: Computing the normal on a sphere
+   ](../images/fig-08-sphere-normal.svg)
 
 Now that we know how to compute the normal, let's change `intersect_sphere` to return a normal
 vector alongside the $t$ parameter. We'll introduce a struct called `Intersection` that bundles
@@ -2296,8 +2295,8 @@ to a color value (in the $[0, 1]$ range):
 
 and we get:
 
-  ![Figure [normal-shaded-spheres]:
-    Visualizing surface normals](../images/img-11-normal-shaded-spheres.png)
+  ![Figure [normal-shaded-spheres]: Visualizing surface normals
+   ](../images/img-11-normal-shaded-spheres.png)
 
 Notice how each color channel maps directly to one of the major axis coordinates, so that normals
 pointing towards the $+x$ direction get shaded with a higher _red_ component, normals pointing
@@ -2334,7 +2333,7 @@ rendering.
 [^ch6-footnote1]: This is referred to as the
 [_Law of Large Numbers_](https://en.wikipedia.org/wiki/Law_of_large_numbers) in probability theory.
 The Monte Carlo method employed in path tracing is an example of this (and we'll talk more about it
-in later chapters).
+in the next chapter).
 
 Frame Count
 -----------
@@ -2611,8 +2610,8 @@ shrink and expand:
 
 This should create an effect like the one in this video (Figure 21):
 
-  ![Figure [animated-radius]:
-    (video) Spheres animated with frame count](../images/vid-01-animated-radius.mp4 autoplay muted loop)
+  ![Figure [animated-radius]: (video) Spheres animated with frame count
+   ](../images/vid-01-animated-radius.mp4 autoplay muted loop)
 
 [^ch6-footnote3]: Metal provides a
 ["managed"](https://developer.apple.com/documentation/metal/resource_fundamentals/synchronizing_a_managed_resource)
@@ -3291,7 +3290,7 @@ each time. The sequences should also ideally differ across adjacent pixels in a 
 (instead of repeating the same spatial pattern) in order to improve the sampling distribution. We
 can combine `uniforms.frame_count` with the pixel's coordinates using a hash function to obtain a
 good initial seed for each thread. I use the _One-at-a-Time Hash_ function from Bob Jenkins'
-Dr Dobbs article from 1997[^jenkins] but you could use any other hash function as long as it's fast
+Dr Dobbs article from 1997[#Jenkins97] but you could use any other hash function as long as it's fast
 and has good statistical properties.
 
 The following listing defines the RNG state, the hash function, and the 32-bit xorshift.
@@ -3405,25 +3404,155 @@ We have successfully employed random sampling to compute the average color of vi
 within a single pixel. Next, we are going to apply the same tools to approximate the radiance that
 flows into the pixel from the scene.
 
-[^ch6-footnote10]: The random offsets generated with xorshift follow a _white noise_ pattern in that
-they appear to be "purely random": the sample points may appear clumped together in some places and
-have large gaps in others. A more even spatial distribution of points (such as _blue noise_ or the
-_Sobol sequence_) can be more desirable for stochastic methods but the Xorshift PRNG is good enough
-for our purposes.
+[^ch6-footnote10]: Xorshift is a so-called _linear congruential generator_. The random offsets
+generated with xorshift follow a _white noise_ pattern in that they appear to be "purely random":
+the sample points may appear clumped together in some places and have large gaps in others. A more
+even spatial distribution of points (e.g. using _blue noise_ or the _Sobol sequence_) is generally
+more desirable for stochastic methods but the Xorshift PRNG is good enough for our purposes, given
+our large number of samples.
+
+Path Tracing
+====================================================================================================
+The human visual system relies on our ability to detect and process light. What we perceive as
+color, shadows, transparency, reflections, and many other visual phenomena are the result of complex
+interactions of light with our environment and how our eyes and brain respond to it. Rendering these
+effects using a computer in a realistic way requires a practical model of the underlying physics.
+Even many stylized rendering applications that prioritize an artistic style over realism (such as
+Pixar's animations) often rely on physically based models for illumination.
+
+We'll start out a with a quick recap of the basic theory behind physically based rendering. The
+following section is a bit abstract and dense in mathematical formalisms. You'll still be able to
+implement an impressive path tracer without having a complete grasp of the subject, so feel free to
+skip or skim through most of it. That said, the concepts introduced here form the basis of modern
+modern rendering and they will come in handy when we get to more advanced techniques later on.
+
+After this PBR refresher, we'll implement the core of the path tracing algorithm and add a basic
+collection of materials.
+
+  ![Figure [cornell-box-preview]: A path traced rendering of the "Cornell Box", showcasing indirect lighting, soft shadows, and refraction caustic.
+   ](../images/img-16-cornell-box-preview.png)
+
+The Rendering Equation
+----------------------
+The basic idea is that different materials scatter light differently. For example, light arriving at
+matte wall paint generally scatters in all directions. A perfectly polished metal surface acts like a
+mirror and reflects light arriving from a particular direction at a very specific outgoing angle. A
+transparent glass surface refracts and transmits light through, though it may also act like a mirror
+and reflect some of the light arriving at grazing angles.
+
+Some materials are emissive and radiate visible light and act as _direct_ light sources.
+Non-emissive objects are also capable of illuminating other surfaces _indirectly_ by reflecting
+light onto them. Most objects typically absorb some frequencies of the light they receive and
+reflect frequencies they don't absorb, imparting what we perceive as color.
+
+  ![Figure [light-paths-in-a-room]: The various paths that light rays in a room may take before they reach the camera.
+   ](../images/fig-09-light-paths-overview.svg)
+
+People have developed numerous techniques over the last half century in order to approximate light
+propagation over the surfaces in the scene. The crux of that computation was later formalized as one
+general equation:[^ch7-footnote1]
+
+$$ \Lo(X, \omega_o) = \Le(X, \omega_o) + \int_\Omega \Li(X, \omega_i) ~ f(X, \omega_i, \omega_o) ~ | \vec{\mathbf{N}} \cdot \omega_i | ~ d\omega_i $$
+
+$L(X, \omega)$ is a function that returns the total radiance arriving or departing at the surface
+patch $X$ along the direction $\omega$. The $L_o$/$L_i$ and $\omega_o$/$\omega_i$ variants are there
+to distinguish outgoing and incident directions. When we cast a camera ray and find an intersection
+$X$, we want to solve for the radiance traveling in the opposite direction of the ray (along
+$\omega_o$) towards the camera.
+
+The first term $L_e$ represents the _emitted_ radiance at the surface. For instance the lamp in the
+Cornell box and the sky should both return a non-zero value since they emit visible light. The
+second term (the integral) represents the total radiance _scattered_ by the surface towards
+$\omega_o$. Let's break down the integral:
+
+$\Omega$ represents the entire range of directions from which light can arrive at $X$. It is
+usually represented as a hemisphere centered at the surface patch $X$ and oriented along the
+surface normal $\vec{\mathbf{N}}$ for surfaces that only reflect, or more generally as a sphere for
+surfaces that can both reflect and transmit light. It is measured as a _solid angle_ and since
+there are infinitely many directions that light can arrive from, we integrate over
+infinitely many tiny solid angles $d\omega_i$ (hence $\int_\Omega ... d\omega_i$).
+
+  ![Figure [brdf-hemisphere]: The integration interval $\Omega$ and the differential solid angle $d\omega_i$ that appears in the integrand. The total incident radiance at surface patch $X$ is given by the integral. $\int_\Omega \Li(X, \omega_i) ~ d\omega_i$.
+   ](../images/fig-10-brdf-hemisphere.svg)
+
+$L_i(X, \omega_i)$ inside the integrand measures the incident radiance from a specific direction
+$\omega_i$, so the integral $\int_\Omega \Li(X, \omega_i) ~ d\omega_i$ measures the total radiance
+arriving from all directions. We are only interested in the fraction of radiance that gets scattered
+towards $\omega_o$ (the direction pointing towards the ray origin), which is given by the function
+$f(X,\omega_i,\omega_o)$. This function represents a so-called _scattering distribution_ and forms
+the standard abstraction for material properties in modern rendering. Specifically, it tells us how
+much of the radiance arriving from $\omega_i$ gets scattered towards $\omega_o$ at the unit patch
+$X$. This is generally referred to as a BSDF (for _Bi-directional Scattering Distribution Function_)
+and sometimes BRDF (for _Bi-directional Reflectance Distribution Function_) when the model only
+handles reflections. It is bi-directional because the function is spatially symmetrical, i.e. yields
+the same result if you swap $\omega_i$ with $\omega_o$.
+
+The BSDF generally embeds absorption. For example, the BSDF for a surface that absorbs all arriving
+radiance and reflects nothing would yield $0$ in all directions. An ideal diffuse surface scatters
+the incoming radiance in all directions over the hemisphere with equal probability. The BSDF for a
+perfect mirror is $0$ in all directions except at a very specific direction corresponding to a
+mirror reflection of $\omega_i$ across $\vec{\mathbf{N}}$. In some sense, the BSDF acts
+like a continuous probability distribution and the reflectance values yield a probability density.
+As such we generally expect the integral of a BSDF over all directions to be at most $1$.[^ch7-footnote2]
+
+The last factor in the integrand, $| \vec{\mathbf{N}} \cdot \omega_i |$, is there to account for
+_Lambert's projected area law_ (also known as the _cosine law_). The law is based on the observation
+that, for a diffuse surface, the intensity of the scattered radiance scales with the viewing angle
+and the observed radiance is proportional to the cosine of the angle between the viewing direction
+and the surface normal (which is equal to the dot product of the two vectors, assuming both have
+unit length). For instance, the reflectance is $0$ if the surface is viewed at a tangent angle (or
+90-degrees relative to $\vec{\mathbf{N}}$ but doesn't diminish when viewed head on.
+
+![Figure [lambert-photometria]: When viewed at an angle, the area $AB$ gets projected onto $AE$. This drawing is from Figure 1 in Lambert's 1760 work *Photometria* [#Lambert1760].
+   ](../images/img-17-lambert-cosine-law-photometria.png)
+
+The law generally only valid for diffuse reflection and generally isn't applied to specular
+reflectors like mirrors. It is common practice to incorporate the cosine term into the BSDF directly
+though that is a design choice.
+
+TODO:
+
+[^ch7-footnote1]: Two very similar forms of the same equation were simultaneously proposed in 1986
+(at the same SIGGRAPH conference no less) in [#Kajiya86] and [#Immel86]. The Kajiya equation is an
+integral over all pairs of surfaces that connect a light path while the Immel formulation (also
+known as "radiosity") is over solid angles of scattering directions. The one presented in this book
+is closer to the latter but the two equations essentially model the same thing.
+
+[^ch7-footnote2]: The integral of the BSDF can be less than $1$ since the material can absorb light
+but it should never be greater than $1$ since that would mean that the material is scattering off
+more energy than it receives. That would violate conservation of energy, a fundamental law of
+physics.
 
                                (insert acknowledgments.md.html here)
 
 References
 ==========
-[^foley-vandam]: J.F. Hughes, A. van Dam, M. McGuire, D.F. Sklar, J.D. Foley, S.K. Feiner, K. Akeley *Computer Graphics: Principles and Practice, 3rd Edition, Section 1.6*
+
+TODO: bibtex style bibliography?
+
+[#Marsaglia03]: George Marsaglia, [*Xorshift RNGs*](https://www.jstatsoft.org/article/download/v008i14/916), 2003
+
+[#Jenkins13]: Bob Jenkins, [*A hash function for hash Table lookup*](https://www.burtleburtle.net/bob/hash/doobs.html), 2013
+
+[#Hughes13]: J.F. Hughes, A. van Dam, M. McGuire, D.F. Sklar, J.D. Foley, S.K. Feiner, K. Akeley *Computer Graphics: Principles and Practice, 3rd Edition, Section 1.6*
+
+"Beyond White Noise for Real-Time Rendering", Alan Wolfe (2024)  https://youtu.be/tethAU66xaA?si=qIPEwF5XTm8kO3tF
+
+[#Immel86]: David S. Immel, Michael F. Cohen, Donald P. Greenberg *A Radiosity Method For Non-Diffuse Environments*
+
+[#Kajiya86]: James T. Kajiya *The Rendering Equation*, 1986
+
+[#Lambert1760]: Johann Heinrich Lambert, *Photometria sive de mensura et gradibus luminis, colorum et umbrae*, 1760. Courtesy of ETH-Bibliothek Zürich, Switzerland.
+
+[#McGuire2024GraphicsCodex]: Morgan McGuire, *The Graphics Codex*, 2024
 
 [^ericson]: C. Ericson, Real Time Collision Detection
 
 [^mcguire-codex]: https://graphicscodex.courses.nvidia.com/app.html
 
-[^marsaglia]: George Marsaglia, Xorshift RNGs: https://www.jstatsoft.org/article/download/v008i14/916
 
-[^jenkins]: https://www.burtleburtle.net/bob/hash/doobs.html
+TODO:
+- A Field Guide to BRDF Models, Stephen H. Westin Hongsong Li Kenneth E. Torrance 2004
 
 [Arman Uguray]:       https://github.com/armansito
 [Steve Hollasch]:     https://github.com/hollasch
