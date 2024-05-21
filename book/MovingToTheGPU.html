@@ -18,19 +18,19 @@ _Path tracing_ is an application of this approach in order to compute _Global Il
 core idea is to repeatedly trace millions of random rays through the scene and bounce them off
 objects based on surface properties. The algorithm is remarkably simple and it is relatively easy
 to build a basic path tracer that supports a small number of material and geometry types. Peter
-Shirley's [_Ray Tracing In One Weekend_][RTIOW] shows you how to get started with a CPU path tracer
-in a quick and enjoyable way.
+Shirley's [_Ray Tracing In One Weekend_][RTIOW] is a great introduction to building the
+foundation for a hobby renderer.
 
 A big challenge with path tracing is its high computational cost. Rendering a complex scene takes a
-long time and this get worse as complexity increases. This has historically made path
+long time and this get worse as the rendered scenes get complex. This has historically made path
 tracing unsuitable for real-time applications. Fortunately -- like many problems in Computer
 Graphics -- the algorithm lends itself very well to parallelism and it is possible to achieve a
-significant speedup by distributing the work across many processor cores. This brings us to GPUs.
+significant speedup by distributing the work across many processor cores.
 
 The GPU (Graphics Processing Unit) is a type of processor designed to run the same set of oparations
 over large amounts of data in parallel. This parallelism has been instrumental to achieving
 realistic visuals in real-time applications like video games. GPUs were traditionally used to
-accelerate _scanline rasterization_ but they have since become programmable and capable of running
+accelerate scanline rasterization but they have since become programmable and capable of running
 a variety of parallel workloads. Notably, dedicated hardware cores to accelerate ray tracing are
 becoming more common in modern GPUs.
 
@@ -46,7 +46,9 @@ simple design. It won't be full-featured and its performance will be limited but
 to several fundamental GPU programming concepts. The renderer you'll have built by the end can serve
 as a great starting point for extensions and experiments with more advanced GPU techniques. We will
 avoid most optimizations in favor of simplicity but the renderer will be able to achieve interactive
-frame rates on a decent GPU.[^ch1]
+frame rates on a decent GPU when targeting simple scenes.[^ch1] The accompanying code intentionally
+avoids hardware ray tracing APIs that are present on newer GPU models, instead focusing on
+implementing the same functionality on a programmable GPU unit using a shading language.
 
 The book follows a similar progression to [_Ray Tracing In One Weekend_][RTIOW]. I cover some of
 the same material but I highly recommend completing _RTIOW_ before embarking on building
@@ -3426,39 +3428,49 @@ implement an impressive path tracer without having a complete grasp of the subje
 skip or skim through most of it. That said, the concepts introduced here form the basis of modern
 modern rendering and they will come in handy when we get to more advanced techniques later on.
 
-After this PBR refresher, we'll implement the core of the path tracing algorithm and add a basic
-collection of materials.
+Next, we'll implement the core of the path tracing algorithm and add a basic collection of materials.
 
   ![Figure [cornell-box-preview]: A path traced rendering of the "Cornell Box", showcasing indirect lighting, soft shadows, and refraction caustic.
    ](../images/img-16-cornell-box-preview.png)
 
-The Rendering Equation
-----------------------
+PBR Refresher
+-------------
 The basic idea is that different materials scatter light differently. For example, light arriving at
 matte wall paint generally scatters in all directions. A perfectly polished metal surface acts like a
-mirror and reflects light arriving from a particular direction at a very specific outgoing angle. A
-transparent glass surface refracts and transmits light through, though it may also act like a mirror
-and reflect some of the light arriving at grazing angles.
+mirror and reflects all light in a specific direction. A transparent glass surface refracts and
+transmits light through, though it may also act like a mirror and reflect some of the light arriving
+at grazing angles.
 
 Some materials are emissive and radiate visible light and act as _direct_ light sources.
-Non-emissive objects are also capable of illuminating other surfaces _indirectly_ by reflecting
-light onto them. Most objects typically absorb some frequencies of the light they receive and
-reflect frequencies they don't absorb, imparting what we perceive as color.
+Non-emissive objects are also capable of illuminating other surfaces _indirectly_ by reflecting light
+onto them. Most objects typically absorb some frequencies of the light they receive and reflect
+others, imparting what we perceive as color.
 
   ![Figure [light-paths-in-a-room]: The various paths that light rays in a room may take before they reach the camera.
    ](../images/fig-09-light-paths-overview.svg)
 
-People have developed numerous techniques over the last half century in order to approximate light
-propagation over the surfaces in the scene. The crux of that computation was later formalized as one
-general equation:[^ch7-footnote1]
+After we cast a camera ray and find an intersection at point $X$ on a surface, we want a measurement
+of the radiance arriving from $X$ in the direction of the camera (opposite the ray direction).
+Radiance is only meaningful in the context of a scattering surface, so in order to be physically
+accurate, we'll imagine $X$ is a tiny patch of surface with infinitesimal area rather than a
+dimensionless point.
+
+If the surface is on an object that emits light then we could return some value corresponding
+to the power of its emission. If the surface material is not emissive then it should only be visible
+by scattering light from other sources. The amount scattered in a given direction depends on
+the material type. In order to compute the outgoing radiance, we need to figure out how much
+energy is arriving at this tiny patch of surface from all directions (known as irradiance) and the
+fraction of it that gets scattered specifically in the direction we're interested in.
+
+This overall computation has been formalized in the computer graphics literature in a general
+formula called the _rendering equation_:[^ch7-footnote1]
 
 $$ \Lo(X, \omega_o) = \Le(X, \omega_o) + \int_\Omega \Li(X, \omega_i) ~ f(X, \omega_i, \omega_o) ~ | \vec{\mathbf{N}} \cdot \omega_i | ~ d\omega_i $$
 
-$L(X, \omega)$ is a function that returns the total radiance arriving or departing at the surface
-patch $X$ along the direction $\omega$. The $L_o$/$L_i$ and $\omega_o$/$\omega_i$ variants are there
-to distinguish outgoing and incident directions. When we cast a camera ray and find an intersection
-$X$, we want to solve for the radiance traveling in the opposite direction of the ray (along
-$\omega_o$) towards the camera.
+$L(X, \omega)$ is a function that returns the radiance arriving or departing at $X$ along the
+direction $\omega$. The $L_o$/$L_i$ and $\omega_o$/$\omega_i$ variants distinguish
+outgoing and incident directions. In this formulation, the direction of the camera ray would be
+$-\omega_o$.
 
 The first term $L_e$ represents the _emitted_ radiance at the surface. For instance the lamp in the
 Cornell box and the sky should both return a non-zero value since they emit visible light. The
@@ -3466,56 +3478,109 @@ second term (the integral) represents the total radiance _scattered_ by the surf
 $\omega_o$. Let's break down the integral:
 
 $\Omega$ represents the entire range of directions from which light can arrive at $X$. It is
-usually represented as a hemisphere centered at the surface patch $X$ and oriented along the
-surface normal $\vec{\mathbf{N}}$ for surfaces that only reflect, or more generally as a sphere for
-surfaces that can both reflect and transmit light. It is measured as a _solid angle_ and since
-there are infinitely many directions that light can arrive from, we integrate over
-infinitely many tiny solid angles $d\omega_i$ (hence $\int_\Omega ... d\omega_i$).
+usually represented as a hemisphere centered at $X$ oriented towards the surface normal
+$\vec{\mathbf{N}}$ for reflective surfaces (more generally a sphere for surfaces that can both
+reflect and transmit light). It is measured as a solid angle and since there are infinitely many
+directions that light can arrive from, we integrate over infinitely many tiny solid angles
+$d\omega_i$ (hence $\int_\Omega ... d\omega_i$). In code, we are going to represent $\omega_i$ with
+a ray direction but we are going to pretend it is a cone with a tiny solid angle subtending another
+infinitesimal surface on some other object that illuminates it.
 
-  ![Figure [brdf-hemisphere]: The integration interval $\Omega$ and the differential solid angle $d\omega_i$ that appears in the integrand. The total incident radiance at surface patch $X$ is given by the integral. $\int_\Omega \Li(X, \omega_i) ~ d\omega_i$.
+  ![Figure [brdf-hemisphere]: The integration interval $\Omega$ and the differential solid angle $d\omega_i$ that appears in the integrand.
    ](../images/fig-10-brdf-hemisphere.svg)
 
-$L_i(X, \omega_i)$ inside the integrand measures the incident radiance from a specific direction
-$\omega_i$, so the integral $\int_\Omega \Li(X, \omega_i) ~ d\omega_i$ measures the total radiance
-arriving from all directions. We are only interested in the fraction of radiance that gets scattered
-towards $\omega_o$ (the direction pointing towards the ray origin), which is given by the function
-$f(X,\omega_i,\omega_o)$. This function represents a so-called _scattering distribution_ and forms
-the standard abstraction for material properties in modern rendering. Specifically, it tells us how
-much of the radiance arriving from $\omega_i$ gets scattered towards $\omega_o$ at the unit patch
-$X$. This is generally referred to as a BSDF (for _Bi-directional Scattering Distribution Function_)
-and sometimes BRDF (for _Bi-directional Reflectance Distribution Function_) when the model only
-handles reflections. It is bi-directional because the function is spatially symmetrical, i.e. yields
-the same result if you swap $\omega_i$ with $\omega_o$.
+$L_i(X, \omega_i)$ inside the integrand measures the incident radiance at $X$ from $\omega_i$.
+Remember that we earlier defined _radiance_ as "the energy carried by light through space,
+restricted to an instant in time, emanating from a unit patch of surface towards another." To match
+the equation, we can be a bit more precise and define it as energy per time per differential surface
+area measure ($X$) per differential solid angle measure ($d\omega_i$).
+
+The last factor in the integrand, $| \vec{\mathbf{N}} \cdot \omega_i |$, is there to account for
+_Lambert's projected area law_ (also known as the _cosine law_). The law is based on the observation
+that the perceived area of a surface scales with the viewing angle. The area appears smaller at
+grazing angles compared to head-on, and it is exactly $0$ when the view direction
+is tangent to the surface. If $\theta$ is the angle between the viewing direction and the surface
+normal, then the scaling factor is equal to $cos ~ \theta$. The same value is given by the dot
+product of the two vectors (assuming they both have unit length).
+
+![Figure [lambert-photometria]: When viewed at an angle, the area $AB$ gets projected onto $AE$, which is smaller. This drawing is from Figure 1 in Lambert's 1760 work "*Photometria*" [#Lambert1760].
+   ](../images/img-17-lambert-cosine-law-photometria.png)
+
+At oblique angles, the projected area of $X$ appears smaller relative to $\omega_i$, so
+$L_i(X, \omega_i)$ is scaled by $| \vec{\mathbf{N}} \cdot \omega_i |$. This ensures that all
+incident radiance measurements are relative to the same unit surface area. Thus, the integral
+$\int_\Omega \Li(X, \omega_i) ~ | \vec{\mathbf{N}} \cdot \omega_i | ~ d\omega_i$ yields the
+irradiance at $X$.
+
+We are interested in the radiance that gets scattered towards $\omega_o$. This is given by
+$f(X,\omega_i,\omega_o)$. This function represents a so-called _scattering distribution_ for the
+surface material. Specifically, it yields the fraction of the radiance arriving from $\omega_i$
+that gets scattered towards $\omega_o$ at $X$. This is generally referred to as a BSDF (for
+_Bi-directional Scattering Distribution Function_) and sometimes BRDF when the material only
+supports reflections (for _Bi-directional Reflectance Distribution Function_). It is
+bi-directional because the function is spatially symmetrical, i.e. yields the same result if you
+swap $\omega_i$ with $\omega_o$.
 
 The BSDF generally embeds absorption. For example, the BSDF for a surface that absorbs all arriving
 radiance and reflects nothing would yield $0$ in all directions. An ideal diffuse surface scatters
 the incoming radiance in all directions over the hemisphere with equal probability. The BSDF for a
 perfect mirror is $0$ in all directions except at a very specific direction corresponding to a
-mirror reflection of $\omega_i$ across $\vec{\mathbf{N}}$. In some sense, the BSDF acts
-like a continuous probability distribution and the reflectance values yield a probability density.
-As such we generally expect the integral of a BSDF over all directions to be at most $1$.[^ch7-footnote2]
+mirror reflection of $\omega_i$ across $\vec{\mathbf{N}}$. In the equation, the BSDF acts as a
+weight for a given value of $\Li$ and it integrates over $\Omega$ to at most 1.[^ch7-footnote2]
 
-The last factor in the integrand, $| \vec{\mathbf{N}} \cdot \omega_i |$, is there to account for
-_Lambert's projected area law_ (also known as the _cosine law_). The law is based on the observation
-that, for a diffuse surface, the intensity of the scattered radiance scales with the viewing angle
-and the observed radiance is proportional to the cosine of the angle between the viewing direction
-and the surface normal (which is equal to the dot product of the two vectors, assuming both have
-unit length). For instance, the reflectance is $0$ if the surface is viewed at a tangent angle (or
-90-degrees relative to $\vec{\mathbf{N}}$ but doesn't diminish when viewed head on.
+The equation nicely summarizes the core computation and supports any type of surface material that
+satisfies the requirements of a BSDF. The downside is that it's not really computable without some
+kind of approximation. The integral is over infinitely many patches surfaces and the function itself
+(which the unknown) appears inside the integral, so the computation involves infinitely many nested
+integrals.
 
-![Figure [lambert-photometria]: When viewed at an angle, the area $AB$ gets projected onto $AE$. This drawing is from Figure 1 in Lambert's 1760 work *Photometria* [#Lambert1760].
-   ](../images/img-17-lambert-cosine-law-photometria.png)
+People have developed numerous techniques over the last half-century to approximate the equation.
+The specific approach we're looking at, path tracing, numerically solves the integral using a
+so called _Markov Chain Monte Carlo_ algorithm. In short, Monte Carlo integration relies
+on evaluating the integrand over a series of random samples and taking their average (sound
+familiar?). For a function $f(x)$, the Monte Carlo estimator of its integral over interval $A$
+using $N$ discrete samples is given as follows:
 
-The law generally only valid for diffuse reflection and generally isn't applied to specular
-reflectors like mirrors. It is common practice to incorporate the cosine term into the BSDF directly
-though that is a design choice.
+$$ \int_A f(x) ~ dx \approx \dfrac{1}{N}\sum_{\bar{\mathbf{x}}}^N \dfrac{f(\bar{\mathbf{x}})}{\rho(\bar{\mathbf{x}})} $$
 
-TODO:
+where $\bar{\mathbf{x}}$ is a random variable and $\rho$ gives the likelihood of picking $\bar{\mathbf{x}}$ --
+a probability distribution. If we apply this to the rendering equation, we get:
 
-[^ch7-footnote1]: Two very similar forms of the same equation were simultaneously proposed in 1986
-(at the same SIGGRAPH conference no less) in [#Kajiya86] and [#Immel86]. The Kajiya equation is an
-integral over all pairs of surfaces that connect a light path while the Immel formulation (also
-known as "radiosity") is over solid angles of scattering directions. The one presented in this book
+$$ \Lo(X, \omega_o) \approx \Le(X, \omega_o) + \dfrac{1}{N}\sum_{j}^N \dfrac{\Li(X, \omega_j) ~ f(X, \omega_j, \omega_o) ~ | \vec{\mathbf{N}} \cdot \omega_j |}{\rho(\omega_j)} $$
+
+Expanding the recursion, we end up with the following:
+
+$$ L_{Xe} + \dfrac{1}{N}\sum_{j}^N \dfrac{f_{Xj} ~ | \vec{\mathbf{N}} \cdot \omega_j |}{\rho_X(\omega_j)} \left[L_{Ye} + \dfrac{1}{N}\sum_{k}^N \dfrac{f_{Yk} ~ | \vec{\mathbf{N}} \cdot \omega_k |}{\rho_Y(\omega_k)} \left[L_{Ze} + \dfrac{1}{N}\sum_{l}^N \dfrac{f_{Zl} ~ | \vec{\mathbf{N}} \cdot \omega_l |}{\rho_Z(\omega_l)} ~ ...\right]\right]$$
+
+I took some liberties with the notation here to keep things concise. To explain this computation in
+terms of ray tracing: first find an intersection on some surface patch $X$. From there, pick $N$
+random directions using a probability distribution derived from the surface material of $X$. Cast
+new rays in those directions and repeat the process for every intersection $Y$, finding the next set
+of surface patches $Z$, and so on. Every sequence of intersections connecting unique surface patches
+($X_j$, $Y_k$, $Z_l$) forms a _light transport path_ (in a graph of infinitely many paths). As it
+turns out, it's possible to sample the graph one path at a time and eventually converge to the
+correct result, which forms the basis of the path tracing algorithm. The fractional radiance
+for a sampled path formed by surface patches $X_j$, $Y_k$, and $Z_l$ connected by rays $\vec{\mathbf{v}}_j,
+\vec{\mathbf{v}}_k, \vec{\mathbf{v}}_l$, etc. can be computed as:
+
+$$ L_{Xe} + \dfrac{f_{X} ~ | \vec{\mathbf{N}} \cdot \vec{\mathbf{v}}_j |}{\rho_X(\vec{\mathbf{v}}_j)} \left[L_{Ye} + \dfrac{f_{Y} ~ | \vec{\mathbf{N}} \cdot \vec{\mathbf{v}}_k |}{\rho_Y(\vec{\mathbf{v}}_k)} \left[L_{Ze} + \dfrac{f_Z ~ | \vec{\mathbf{N}} \cdot \vec{\mathbf{v}}_l |}{\rho_Z(\vec{\mathbf{v}}_l)} ~ ...\right]\right]$$
+
+This is something we can implement iteratively in the shader. The mathematical derivation for the
+path tracing algorithm is useful in two ways. First, it explains why randomly sampling the scene
+yields a correct image at all and provides a framework for sampling strategies. Second, it defines
+the interface for implementing a material: $f$ and $\rho$. We can model many real materials by
+choosing a good approximate BSDF and a BSDF PDF (probability distribution function).
+
+That covers the basics of the underlying theory. There's a lot I skipped past here but if you're
+interested in learning more about the subject, I highly recommend
+[The Graphics Codex](https://graphicscodex.com/app/app.html) [#McGuire2024GraphicsCodex]. It is an
+excellent reference for a range of topics related to physically-based rendering and light transport.
+I also recommend [Ray Tracing: The Rest Of Your Life](RTTROYL) which is a good introduction to
+Monte Carlo integration and sampling techniques.
+
+
+[^ch7-footnote1]: Two very similar forms of the same equation were simultaneously published in 1986 in [#Kajiya86] and [#Immel86]. The Kajiya equation is an
+integral over all mutually visible pairs of surfaces that connect a light path while the Immel formulation is over solid angles of scattering directions. The one presented in this book
 is closer to the latter but the two equations essentially model the same thing.
 
 [^ch7-footnote2]: The integral of the BSDF can be less than $1$ since the material can absorb light
@@ -3554,10 +3619,22 @@ TODO: bibtex style bibliography?
 TODO:
 - A Field Guide to BRDF Models, Stephen H. Westin Hongsong Li Kenneth E. Torrance 2004
 
+<!--
+@book{McGuire2024GraphicsCodex,
+    title = {The Graphics Codex},
+    author = {Morgan McGuire},
+    year = {2024},
+    edition = {2.17},
+    publisher = {Casual Effects},
+    url = {https://graphicscodex.com}
+}
+-->
+
 [Arman Uguray]:       https://github.com/armansito
 [Steve Hollasch]:     https://github.com/hollasch
 [Trevor David Black]: https://github.com/trevordblack
 [RTIOW]:              https://raytracing.github.io/books/RayTracingInOneWeekend.html
+[RTTROYL]:            https://raytracing.github.io/books/RayTracingTheRestOfYourLife.html
 [rt-project]:         https://github.com/RayTracing/
 [gt-project]:         https://github.com/RayTracing/gpu-tracing/
 [gt-template]:        https://github.com/RayTracing/gpu-tracing/blob/dev/code/template
