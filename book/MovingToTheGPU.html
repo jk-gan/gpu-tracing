@@ -3588,6 +3588,251 @@ but it should never be greater than $1$ since that would mean that the material 
 more energy than it receives. That would violate conservation of energy, a fundamental law of
 physics.
 
+Path Tracing Loop
+-----------------
+Before implementing the path tracing logic let's introduce two subroutines. The first will be a
+new function responsible for traversing the scene and finding an intersection, called
+`intersect_scene`:
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+    ...
+
+    struct Intersection {
+      normal: vec3f,
+      t: f32,
+    }
+
+    fn no_intersection() -> Intersection {
+      return Intersection(vec3(0.), -1.);
+    }
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL highlight
+    fn is_intersection_valid(hit: Intersection) -> bool {
+      return hit.t > 0.;
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+
+    ...
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL highlight
+    fn intersect_scene(ray: Ray) -> Intersection {
+      var closest_hit = Intersection(vec3(0.), FLT_MAX);
+      for (var i = 0u; i < OBJECT_COUNT; i += 1u) {
+        let sphere = scene[i];
+        let hit = intersect_sphere(ray, sphere);
+        if hit.t > 0. && hit.t < closest_hit.t {
+          closest_hit = hit;
+        }
+      }
+      if closest_hit.t < FLT_MAX {
+        return closest_hit;
+      }
+      return no_intersection();
+    }
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+    struct Ray {
+      origin: vec3f,
+      direction: vec3f,
+    }
+
+    ...
+
+    @fragment fn display_fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+      init_rng(vec2u(pos.xy));
+
+      let origin = vec3(0.);
+      let focus_distance = 1.;
+      let aspect_ratio = f32(uniforms.width) / f32(uniforms.height);
+
+      // Offset and normalize the viewport coordinates of the ray.
+      let offset = vec2(rand_f32() - 0.5, rand_f32() - 0.5);
+      var uv = (pos.xy + offset) / vec2f(f32(uniforms.width - 1u), f32(uniforms.height - 1u));
+
+      // Map `uv` from y-down (normalized) viewport coordinates to camera coordinates.
+      uv = (2. * uv - vec2(1.)) * vec2(aspect_ratio, -1.);
+
+      let direction = vec3(uv, -focus_distance);
+      let ray = Ray(origin, direction);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL highlight
+      let hit = intersect_scene(ray);
+
+      var radiance_sample: vec3f;
+      if is_intersection_valid(hit) {
+        radiance_sample = vec3(0.5 * hit.normal + vec3(0.5));
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+      } else {
+        radiance_sample = sky_color(ray);
+      }
+      ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [intersect-scene]: <kbd>[shaders.wgsl]</kbd> The intersect_scene function]
+
+The second new function called `scatter` responsible for evaluating the surface material. This
+function is going to return two values: an attenuation factor that represents the fraction of
+radiance scattered in the direction of a given ray and a ray direction ($\omega_i$) according to the
+BSDF. The attenuation factor corresponds to the $ \dfrac{f(X, \omega_i, \omega_o) ~ | \vec{\mathbf{N}} \cdot \omega_i |}{\rho(\omega_i)} $ term in the rendering equation.
+
+Let's initially make a simple but unrealistic scattering function that always picks the surface
+normal. This is an invalid scattering distribution but it's useful for validating our initial code:
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+    ...
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL highlight
+    struct Scatter {
+      attenuation: vec3f,
+      ray: Ray,
+    }
+
+    fn scatter(incident: Ray, hit: Intersection) -> Scatter {
+      let scattered = Ray(point_on_ray(incident, hit.t), hit.normal);
+      let attenuation = vec3(0.8);
+      return Scatter(attenuation, scattered);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+
+    struct Ray {
+      origin: vec3f,
+      direction: vec3f,
+    }
+
+    ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [intersect-scene]: <kbd>[shaders.wgsl]</kbd> The intersect_scene function]
+
+The returned attenuation factor of $0.8$ means that the material absorbs 20% of the incoming
+radiance (in all color channels). The last equation from Section [pbr refresher] is expressed in a
+recursive form but WGSL doesn't allow any form of recursion (GPUs generally don't support it). So,
+we'll iterate forward, accumulating the product of attenuation values independently and only factor
+it into the computed radiance when we encounter a light source (which is just the sky for now):
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+    ...
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL highlight
+    const MAX_PATH_LENGTH: u32 = 6u;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+
+    ...
+
+    @fragment fn display_fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+      init_rng(vec2u(pos.xy));
+
+      let origin = vec3(0.);
+      let focus_distance = 1.;
+      let aspect_ratio = f32(uniforms.width) / f32(uniforms.height);
+
+      // Offset and normalize the viewport coordinates of the ray.
+      let offset = vec2(rand_f32() - 0.5, rand_f32() - 0.5);
+      var uv = (pos.xy + offset) / vec2f(f32(uniforms.width - 1u), f32(uniforms.height - 1u));
+
+      // Map `uv` from y-down (normalized) viewport coordinates to camera coordinates.
+      uv = (2. * uv - vec2(1.)) * vec2(aspect_ratio, -1.);
+
+      let direction = vec3(uv, -focus_distance);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL highlight
+      var ray = Ray(origin, direction);
+      var throughput = vec3f(1.);
+      var radiance_sample = vec3(0.);
+
+      var path_length = 0u;
+      while path_length < MAX_PATH_LENGTH {
+        let hit = intersect_scene(ray);
+        if is_intersection_valid(hit) {
+          let scattered = scatter(ray, hit);
+          throughput *= scattered.attenuation;
+          ray = scattered.ray;
+        } else {
+          // If no intersection was found, return the color of the sky and terminate the path.
+          radiance_sample += throughput * sky_color(ray);
+          break;
+        }
+        path_length += 1u;
+      }
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+      // Fetch the old sum of samples.
+      var old_sum: vec3f;
+      if uniforms.frame_count > 1 {
+        old_sum = textureLoad(radiance_samples_old, vec2u(pos.xy), 0).xyz;
+      } else {
+        old_sum = vec3(0.);
+      }
+      ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [intersect-scene]: <kbd>[shaders.wgsl]</kbd> The intersect_scene function]
+
+`throughput` starts out as $1$ (meaning no radiance has been absorbed). We also impose an artificial
+limit on the length of a sampled path to prevent looping forever if a path never encounters the sky
+(which can happen with certain kinds of geometry). Running this program should produce this image:
+
+  ![Figure [invalid-scatter-with-shadow-acne]: Validating the path tracing loop (with shadow acne)
+   ](../images/img-17-invalid-scatter-with-shadow-acne.png)
+
+Even though the scattering is unrealistic, we can see reflections, a little bit of shadowing, and an
+overall bluish tint that the sky casts on both spheres. Though, there are some nasty circular bands
+on both spheres due to an artifact called "shadow acne" or "self-shadowing". This happens due to the
+limited (and quantized) precision inherent in floating point arithmetic: sometimes the computed
+intersection point doesn't fall precisely on the sphere surface and using it as the origin of the
+new ray causes the ray to intersect the sphere again at the same spot (in this case the point falls
+"beneath" the surface). The easiest way to deal with this is to reject intersections for values of $t$
+that are below a small offset:
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+    const FLT_MAX: f32 = 3.40282346638528859812e+38;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL highlight
+    const EPSILON: f32 = 1e-3;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+
+    ...
+
+    fn intersect_sphere(ray: Ray, sphere: Sphere) -> Intersection {
+      let v = ray.origin - sphere.center;
+      let a = dot(ray.direction, ray.direction);
+      let b = dot(v, ray.direction);
+      let c = dot(v, v) - sphere.radius * sphere.radius;
+
+      let d = b * b - a * c;
+      if d < 0. {
+        return no_intersection();
+      }
+
+      let sqrt_d = sqrt(d);
+      let recip_a = 1. / a;
+      let mb = -b;
+      let t1 = (mb - sqrt_d) * recip_a;
+      let t2 = (mb + sqrt_d) * recip_a;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL highlight
+      let t = select(t2, t1, t1 > EPSILON);
+      if t <= EPSILON {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+        return no_intersection();
+      }
+
+      let p = point_on_ray(ray, t);
+      let N = (p - sphere.center) / sphere.radius;
+      return Intersection(N, t);
+    }
+
+    ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [intersect-scene]: <kbd>[shaders.wgsl]</kbd> The intersect_scene function]
+
+The code makes sure that both potential intersections on a sphere are considered with a small
+threshold ($\epsilon$ or _epsilon_). This will be important for transmissive materials that can
+refract a ray towards the inside of a sphere and reintersect it. Following this change, the
+rendering should look like this:
+
+  ![Figure [invalid-scatter-without-shadow-acne]: Validating the path tracing loop
+   ](../images/img-18-invalid-scatter-without-shadow-acne.png)
+
                                (insert acknowledgments.md.html here)
 
 References
