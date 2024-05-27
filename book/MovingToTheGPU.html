@@ -3518,38 +3518,36 @@ incident radiance measurements are relative to the same unit surface area. Thus,
 $\int_\Omega \Li(X, \omega_i) ~ | \vec{\mathbf{N}} \cdot \omega_i | ~ d\omega_i$ yields the
 irradiance at $X$.
 
-We are interested in the radiance that gets scattered towards $\omega_o$. This is given by
+We are interested in the amount of radiance scattered towards $\omega_o$. This is given by
 $f(X,\omega_i,\omega_o)$. This function represents a so-called _scattering distribution_ for the
 surface material. Specifically, it yields the fraction of the radiance arriving from $\omega_i$
 that gets scattered towards $\omega_o$ at $X$. This is generally referred to as a BSDF (for
 _Bi-directional Scattering Distribution Function_) and sometimes BRDF when the material only
 supports reflections (for _Bi-directional Reflectance Distribution Function_). It is
-bi-directional because the function is spatially symmetrical, i.e. yields the same result if you
-swap $\omega_i$ with $\omega_o$.
+bi-directional because the function has some symmetry, i.e. works the same way if you swap
+$\omega_i$ with $\omega_o$.
 
-The BSDF generally embeds absorption. For example, the BSDF for a surface that absorbs all arriving
-radiance and reflects nothing would yield $0$ in all directions. An ideal diffuse surface scatters
-the incoming radiance in all directions over the hemisphere with equal probability. The BSDF for a
+The BSDF embeds absorption. For example, the BSDF for a surface that absorbs all arriving
+radiance and reflects nothing would yield $0$ in all directions. The BSDF for a
 perfect mirror is $0$ in all directions except at a very specific direction corresponding to a
 mirror reflection of $\omega_i$ across $\vec{\mathbf{N}}$. In the equation, the BSDF acts as a
 weight for a given value of $\Li$ and it integrates over $\Omega$ to at most 1.[^ch7-footnote2]
 
 The equation nicely summarizes the core computation and supports any type of surface material that
 satisfies the requirements of a BSDF. The downside is that it's not really computable without some
-kind of approximation. The integral is over infinitely many patches surfaces and the function itself
-(which the unknown) appears inside the integral, so the computation involves infinitely many nested
-integrals.
+kind of approximation. The integral is over infinitely many patches of surfaces and the function
+itself appears inside the integral, involving infinitely many nested integrals.
 
 People have developed numerous techniques over the last half-century to approximate the equation.
 The specific approach we're looking at, path tracing, numerically solves the integral using a
-so called _Markov Chain Monte Carlo_ algorithm. In short, Monte Carlo integration relies
-on evaluating the integrand over a series of random samples and taking their average (sound
-familiar?). For a function $f(x)$, the Monte Carlo estimator of its integral over interval $A$
-using $N$ discrete samples is given as follows:
+so called _Markov Chain Monte Carlo_ algorithm. This method relies on evaluating the integrand
+over a series of random samples and taking their average (sound familiar?). For a function
+$f(x)$, the Monte Carlo estimator of its integral over interval $A$ using $N$ discrete samples is
+given as follows:
 
 $$ \int_A f(x) ~ dx \approx \dfrac{1}{N}\sum_{\bar{\mathbf{x}}}^N \dfrac{f(\bar{\mathbf{x}})}{\rho(\bar{\mathbf{x}})} $$
 
-where $\bar{\mathbf{x}}$ is a random variable and $\rho$ gives the likelihood of picking $\bar{\mathbf{x}}$ --
+where $\bar{\mathbf{x}}$ is a random variable and $\rho$ gives the likelihood of choosing $\bar{\mathbf{x}}$ --
 a probability distribution. If we apply this to the rendering equation, we get:
 
 $$ \Lo(X, \omega_o) \approx \Le(X, \omega_o) + \dfrac{1}{N}\sum_{j}^N \dfrac{\Li(X, \omega_j) ~ f(X, \omega_j, \omega_o) ~ | \vec{\mathbf{N}} \cdot \omega_j |}{\rho(\omega_j)} $$
@@ -3572,14 +3570,14 @@ path formed by surface patches $X_j$, $Y_k$, and $Z_l$ connected by rays $\vec{\
 $$ L_{Xe} + \dfrac{f_{X} ~ | \vec{\mathbf{N}} \cdot \vec{\mathbf{v}}_j |}{\rho_X(\vec{\mathbf{v}}_j)} \left[L_{Ye} + \dfrac{f_{Y} ~ | \vec{\mathbf{N}} \cdot \vec{\mathbf{v}}_k |}{\rho_Y(\vec{\mathbf{v}}_k)} \left[L_{Ze} + \dfrac{f_Z ~ | \vec{\mathbf{N}} \cdot \vec{\mathbf{v}}_l |}{\rho_Z(\vec{\mathbf{v}}_l)} ~ ...\right]\right]$$
 
 In other words, we multiply the computed radiance by $ \dfrac{f(X, \omega_j, \omega_o) ~ | \vec{\mathbf{N}} \cdot \omega_j |}{\rho(\omega_j)} $
-for every surface that the path intersects. Each multiplication will either reduce the radiance by
+at every intersection. Each multiplication will either reduce the radiance by
 some amount (meaning some of the light got absorbed) or leave it intact (meaning 100% transmission).
 
 That covers the basics of the underlying theory. This mathematical derivation may feel like
 a bunch of fancy formalism but it is useful in two ways. First, it explains why randomly sampling
 the scene yields a correct image at all and provides a framework for different sampling strategies.
 Second, it defines the interface for implementing a material: $f$ and $\rho$. We can model many real
-materials by choosing a good approximate BSDF and a BSDF PDF (probability distribution function).
+materials by choosing a good approximate BSDF and a BSDF PDF (for _Probability Distribution Function_).
 
 There's a lot I skipped past here but if you're interested in learning more about the subject, I
 highly recommend reading [The Graphics Codex](https://graphicscodex.com/app/app.html) [#McGuire2024GraphicsCodex].
