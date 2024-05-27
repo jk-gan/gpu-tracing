@@ -3427,19 +3427,20 @@ effects using a computer in a realistic way requires a practical model of the un
 Even many stylized rendering applications that prioritize an artistic style over realism (such as
 Pixar's animations) often rely on physically based models for illumination.
 
-We'll start out a with a quick recap of the basic theory behind physically based rendering. The
+We'll start out a with a quick refresher of the basic theory behind physically based rendering. The
 following section is a bit abstract and dense in mathematical formalisms. You'll still be able to
 implement an impressive path tracer without having a complete grasp of the subject, so feel free to
-skip or skim through most of it. That said, the concepts introduced here form the basis of modern
-modern rendering and they will come in handy when we get to more advanced techniques later on.
+skip or skim through most of it. That said, the concepts introduced here form the basis for modern
+rendering and they will come in handy when we get to more advanced techniques later on.
 
-Next, we'll implement the core of the path tracing algorithm and add a basic collection of materials.
+After the refresher, we'll build the core of the path tracing algorithm and add a basic collection
+of materials.
 
   ![Figure [cornell-box-preview]: A path traced rendering of the "Cornell Box", showcasing indirect lighting, soft shadows, and refraction caustic.
    ](../images/img-16-cornell-box-preview.png)
 
-PBR Refresher
--------------
+Physically Based Rendering
+--------------------------
 The basic idea is that different materials scatter light differently. For example, light arriving at
 matte wall paint generally scatters in all directions. A perfectly polished metal surface acts like a
 mirror and reflects all light in a specific direction. A transparent glass surface refracts and
@@ -3491,7 +3492,7 @@ $d\omega_i$ (hence $\int_\Omega ... d\omega_i$). In code, we are going to repres
 a ray direction but we are going to pretend it is a cone with a tiny solid angle subtending another
 infinitesimal surface on some other object that illuminates it.
 
-  ![Figure [brdf-hemisphere]: The integration interval $\Omega$ and the differential solid angle $d\omega_i$ that appears in the integrand.
+  ![Figure [brdf-hemisphere]: The integration interval $\Omega$ and the differential solid angle $d\omega$. Radiance is defined as power arriving at $X$ via $d\omega$.
    ](../images/fig-10-brdf-hemisphere.svg)
 
 $L_i(X, \omega_i)$ inside the integrand measures the incident radiance at $X$ from $\omega_i$.
@@ -3564,22 +3565,25 @@ new rays in those directions and repeat the process for every intersection $Y$, 
 of surface patches $Z$, and so on. Every sequence of intersections connecting unique surface patches
 ($X_j$, $Y_k$, $Z_l$) forms a _light transport path_ (in a graph of infinitely many paths). As it
 turns out, it's possible to sample the graph one path at a time and eventually converge to the
-correct result, which forms the basis of the path tracing algorithm. The fractional radiance
-for a sampled path formed by surface patches $X_j$, $Y_k$, and $Z_l$ connected by rays $\vec{\mathbf{v}}_j,
+correct result, which forms the basis of the path tracing algorithm. The radiance from a sampled
+path formed by surface patches $X_j$, $Y_k$, and $Z_l$ connected by rays $\vec{\mathbf{v}}_j,
 \vec{\mathbf{v}}_k, \vec{\mathbf{v}}_l$, etc. can be computed as:
 
 $$ L_{Xe} + \dfrac{f_{X} ~ | \vec{\mathbf{N}} \cdot \vec{\mathbf{v}}_j |}{\rho_X(\vec{\mathbf{v}}_j)} \left[L_{Ye} + \dfrac{f_{Y} ~ | \vec{\mathbf{N}} \cdot \vec{\mathbf{v}}_k |}{\rho_Y(\vec{\mathbf{v}}_k)} \left[L_{Ze} + \dfrac{f_Z ~ | \vec{\mathbf{N}} \cdot \vec{\mathbf{v}}_l |}{\rho_Z(\vec{\mathbf{v}}_l)} ~ ...\right]\right]$$
 
-This is something we can implement iteratively in the shader. The mathematical derivation for the
-path tracing algorithm is useful in two ways. First, it explains why randomly sampling the scene
-yields a correct image at all and provides a framework for sampling strategies. Second, it defines
-the interface for implementing a material: $f$ and $\rho$. We can model many real materials by
-choosing a good approximate BSDF and a BSDF PDF (probability distribution function).
+In other words, we multiply the computed radiance by $ \dfrac{f(X, \omega_j, \omega_o) ~ | \vec{\mathbf{N}} \cdot \omega_j |}{\rho(\omega_j)} $
+for every surface that the path intersects. Each multiplication will either reduce the radiance by
+some amount (meaning some of the light got absorbed) or leave it intact (meaning 100% transmission).
 
-That covers the basics of the underlying theory. There's a lot I skipped past here but if you're
-interested in learning more about the subject, I highly recommend
-[The Graphics Codex](https://graphicscodex.com/app/app.html) [#McGuire2024GraphicsCodex]. It is an
-excellent reference for a range of topics related to physically-based rendering and light transport.
+That covers the basics of the underlying theory. This mathematical derivation may feel like
+a bunch of fancy formalism but it is useful in two ways. First, it explains why randomly sampling
+the scene yields a correct image at all and provides a framework for different sampling strategies.
+Second, it defines the interface for implementing a material: $f$ and $\rho$. We can model many real
+materials by choosing a good approximate BSDF and a BSDF PDF (probability distribution function).
+
+There's a lot I skipped past here but if you're interested in learning more about the subject, I
+highly recommend reading [The Graphics Codex](https://graphicscodex.com/app/app.html) [#McGuire2024GraphicsCodex].
+It is an excellent reference for a range of topics related to physically-based rendering and light transport.
 I also recommend [Ray Tracing: The Rest Of Your Life](RTTROYL) which is a good introduction to
 Monte Carlo integration and sampling techniques.
 
@@ -3676,14 +3680,23 @@ new function responsible for traversing the scene and finding an intersection, c
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     [Listing [intersect-scene]: <kbd>[shaders.wgsl]</kbd> The intersect_scene function]
 
-The second new function called `scatter` responsible for evaluating the surface material. This
-function is going to return two values: an attenuation factor that represents the fraction of
-radiance scattered in the direction of a given ray and a ray direction ($\omega_i$) according to the
-BSDF. The attenuation factor corresponds to the $ \dfrac{f(X, \omega_i, \omega_o) ~ | \vec{\mathbf{N}} \cdot \omega_i |}{\rho(\omega_i)} $ term in the rendering equation.
+A second new function, called `scatter`, will be responsible for evaluating the surface material. It is
+going to return two values: an attenuation factor that represents the fraction of scattered radiance
+and a ray direction ($\omega_i$) sampled according to the BSDF. The attenuation factor effectively
+corresponds to the $ \dfrac{f(X, \omega_i, \omega_o) ~ | \vec{\mathbf{N}} \cdot \omega_i |}{\rho(\omega_i)} $
+term from the rendering equation. We store it as a `vec3f` since we're computing a separate radiance
+value for each color channel.[^ch7-footnote3]
 
-Let's initially make a simple but unrealistic scattering function that always picks the surface
-normal. This is an invalid scattering distribution but it's useful for validating our initial code:
+Our rays originate from the camera and trace the transport path _backwards_ towards light sources,
+so when we call `scatter` we already know the scattering direction. In that sense "scatter" may
+feel like a misnomer (as it computes the inverse). Remember that a BSDF is bi-directional and
+follows the same rules in both incident and outgoing light directions. Our `scatter` function works
+the same way and allows the `input_ray` parameter to be either an incident or a scattered light
+direction.
 
+We'll start with a simple but unrealistic scattering function that always picks the surface
+normal as the output direction. This isn't a realistic scattering distribution but it's useful
+for validating our initial code:
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
     ...
@@ -3695,10 +3708,10 @@ normal. This is an invalid scattering distribution but it's useful for validatin
       ray: Ray,
     }
 
-    fn scatter(incident: Ray, hit: Intersection) -> Scatter {
-      let scattered = Ray(point_on_ray(incident, hit.t), hit.normal);
+    fn scatter(input_ray: Ray, hit: Intersection) -> Scatter {
+      let output_ray = Ray(point_on_ray(input_ray, hit.t), hit.normal);
       let attenuation = vec3(0.8);
-      return Scatter(attenuation, scattered);
+      return Scatter(attenuation, output_ray);
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
 
@@ -3711,11 +3724,14 @@ normal. This is an invalid scattering distribution but it's useful for validatin
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     [Listing [intersect-scene]: <kbd>[shaders.wgsl]</kbd> The intersect_scene function]
 
+
 The returned attenuation factor of $0.8$ means that the material absorbs 20% of the incoming
-radiance (in all color channels). The last equation from Section [pbr refresher] is expressed in a
-recursive form but WGSL doesn't allow any form of recursion (GPUs generally don't support it). So,
-we'll iterate forward, accumulating the product of attenuation values independently and only factor
-it into the computed radiance when we encounter a light source (which is just the sky for now):
+radiance (in all color channels) and scatters the rest. The last equation from
+Section [physically based rendering] is expressed in a recursive form but WGSL doesn't allow any
+form of recursion (GPUs generally don't support it). That's not a huge issue since we can calculate
+it using a loop instead. We'll iterate forward, storing the product of attenuation values
+separately and only factor it into the computed radiance when we encounter a light source (which is
+just the sky for now):
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
     ...
@@ -3775,8 +3791,9 @@ it into the computed radiance when we encounter a light source (which is just th
     [Listing [intersect-scene]: <kbd>[shaders.wgsl]</kbd> The intersect_scene function]
 
 `throughput` starts out as $1$ (meaning no radiance has been absorbed). We also impose an artificial
-limit on the length of a sampled path to prevent looping forever if a path never encounters the sky
-(which can happen with certain kinds of geometry). Running this program should produce this image:
+limit on the length of a sampled path to prevent looping forever if a path never encounters a light
+source  (which can happen with certain types of geometry). Running this program should produce this
+image:
 
   ![Figure [invalid-scatter-with-shadow-acne]: Validating the path tracing loop (with shadow acne)
    ](../images/img-17-invalid-scatter-with-shadow-acne.png)
@@ -3786,7 +3803,7 @@ overall bluish tint that the sky casts on both spheres. Though, there are some n
 on both spheres due to an artifact called "shadow acne" or "self-shadowing". This happens due to the
 limited (and quantized) precision inherent in floating point arithmetic: sometimes the computed
 intersection point doesn't fall precisely on the sphere surface and using it as the origin of the
-new ray causes the ray to intersect the sphere again at the same spot (in this case the point falls
+new ray causes the ray to intersect the sphere again near the same spot (in this case the point falls
 "beneath" the surface). The easiest way to deal with this is to reject intersections for values of $t$
 that are below a small offset:
 
@@ -3830,13 +3847,18 @@ that are below a small offset:
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     [Listing [intersect-scene]: <kbd>[shaders.wgsl]</kbd> The intersect_scene function]
 
-The code makes sure that both potential intersections on a sphere are considered with a small
-threshold ($\epsilon$ or _epsilon_). This will be important for transmissive materials that can
-refract a ray towards the inside of a sphere and reintersect it. Following this change, the
-rendering should look like this:
+By handling this in `intersect_sphere` we can ensure that both potential intersection points on a
+sphere get considered with a small threshold ($\epsilon$ or _epsilon_) in case the ray gets
+scattered _inside_ the sphere (which can happen if the material is glass). Following this change,
+the rendering should look like this:
 
   ![Figure [invalid-scatter-without-shadow-acne]: Validating the path tracing loop
    ](../images/img-18-invalid-scatter-without-shadow-acne.png)
+
+[^ch7-footnote3]: This RGB representation is simple and works well for most cases but cannot
+accurately represent effects like diffraction and interference. There are alternative
+representations to handle such phenomena, for example by storing a power distribution across a
+spectrum of constituent wavelengths.
 
                                (insert acknowledgments.md.html here)
 

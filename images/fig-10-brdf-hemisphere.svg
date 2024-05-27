@@ -23,12 +23,12 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="0.94939861"
-     inkscape:cx="697.28352"
-     inkscape:cy="523.48929"
+     inkscape:zoom="1.1332114"
+     inkscape:cx="689.63299"
+     inkscape:cy="483.58142"
      inkscape:window-width="1464"
      inkscape:window-height="995"
-     inkscape:window-x="291"
+     inkscape:window-x="264"
      inkscape:window-y="38"
      inkscape:window-maximized="0"
      inkscape:current-layer="layer1" />
@@ -154,8 +154,9 @@
        id="path15" />
     <path
        style="fill:#ff6666;fill-opacity:0.794304;stroke:#000000;stroke-width:0.372999;stroke-linecap:butt;stroke-linejoin:round;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:0.822785"
-       d="m 174.56343,143.75452 45.18562,-52.780653 6.46307,6.250271 z"
-       id="path4" />
+       d="m 171.90562,142.95616 47.84343,-51.982293 6.46307,6.250271 -49.38465,47.935112"
+       id="path4"
+       sodipodi:nodetypes="cccc" />
     <path
        style="fill:#ff6666;fill-opacity:1;stroke:#000000;stroke-width:0.373;stroke-linecap:butt;stroke-linejoin:round;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:0.822785"
        id="path3"
@@ -170,6 +171,20 @@
        sodipodi:arc-type="chord"
        d="m 228.37787,-85.109794 a 4.4954748,2.8096719 0 0 1 -6.28186,-0.58115 4.4954748,2.8096719 0 0 1 0.91551,-3.927478 4.4954748,2.8096719 0 0 1 6.28603,0.563225 4.4954748,2.8096719 0 0 1 -0.88681,3.930048 z"
        transform="rotate(44.041078)" />
+    <path
+       style="fill:#ff6666;fill-opacity:1;stroke:#000000;stroke-width:0.418;stroke-linecap:butt;stroke-linejoin:round;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:0.822785"
+       id="path3-8"
+       sodipodi:type="arc"
+       sodipodi:cx="172.15231"
+       sodipodi:cy="146.77107"
+       sodipodi:rx="3.0728142"
+       sodipodi:ry="1.9205091"
+       sodipodi:start="0.93349205"
+       sodipodi:end="0.92436405"
+       sodipodi:open="true"
+       sodipodi:arc-type="chord"
+       d="m 173.98073,148.31459 a 3.0728142,1.9205091 0 0 1 -4.29387,-0.39724 3.0728142,1.9205091 0 0 1 0.62578,-2.68456 3.0728142,1.9205091 0 0 1 4.29673,0.38498 3.0728142,1.9205091 0 0 1 -0.60617,2.68633 z"
+       transform="rotate(-0.958922)" />
     <text
        xml:space="preserve"
        style="font-size:16.9333px;font-family:Arial;-inkscape-font-specification:Arial;text-align:center;text-anchor:middle;fill:#ff6666;fill-opacity:1;stroke:#000000;stroke-width:0.372999;stroke-linecap:butt;stroke-linejoin:round;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:0.822785"
@@ -188,7 +203,7 @@
        style="font-size:64px;font-family:Arial;-inkscape-font-specification:Arial;text-align:center;white-space:pre;shape-inside:url(#rect5);display:inline;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:1.40976;stroke-linecap:butt;stroke-linejoin:round;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:0.822785"><tspan
          x="302.73535"
          y="202.17953"
-         id="tspan2">Ω&#10;</tspan></text>
+         id="tspan1">Ω&#10;</tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.15381289,0,0,0.15381289,182.09693,61.146389)"
@@ -196,14 +211,14 @@
        style="font-size:64px;font-family:Arial;-inkscape-font-specification:Arial;text-align:center;white-space:pre;shape-inside:url(#rect5-9);display:inline;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:1.40976;stroke-linecap:butt;stroke-linejoin:round;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:0.822785"><tspan
          x="282.04608"
          y="202.17953"
-         id="tspan7"><tspan
+         id="tspan8"><tspan
    style="stroke-opacity:0"
-   id="tspan3">𝑑𝜔</tspan><tspan
+   id="tspan2">𝑑𝜔</tspan><tspan
    style="font-size:65%;baseline-shift:sub;stroke-opacity:0"
-   id="tspan5">𝑖</tspan>&#10;</tspan><tspan
+   id="tspan6">𝑖</tspan>&#10;</tspan><tspan
          x="259.61133"
          y="283.05981"
-         id="tspan10"> &#10;</tspan></text>
+         id="tspan11"> &#10;</tspan></text>
     <text
        xml:space="preserve"
        style="font-size:13.2396px;font-family:Arial;-inkscape-font-specification:Arial;text-align:center;text-anchor:middle;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0.291635;stroke-linecap:butt;stroke-linejoin:round;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:0"

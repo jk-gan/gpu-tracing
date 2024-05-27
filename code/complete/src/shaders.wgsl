@@ -118,10 +118,10 @@ struct Scatter {
   ray: Ray,
 }
 
-fn scatter(incident: Ray, hit: Intersection) -> Scatter {
-  let scattered = Ray(point_on_ray(incident, hit.t), hit.normal);
+fn scatter(input_ray: Ray, hit: Intersection) -> Scatter {
+  let output_ray = Ray(point_on_ray(input_ray, hit.t), hit.normal);
   let attenuation = vec3(0.7);
-  return Scatter(attenuation, scattered);
+  return Scatter(attenuation, output_ray);
 }
 
 struct Ray {
