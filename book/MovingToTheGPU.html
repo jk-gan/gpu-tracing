@@ -3230,7 +3230,7 @@ accumulation logic has no effect because every sample is computing exactly the s
 Let's zoom in and take a closer look at the edges of the spheres:
 
   ![Figure [aliased-boundaries]: Aliased shape boundaries @ 400x300
-   ](../images/img-13-aliased-boundaries.png height="500px")
+   ](../images/img-13-aliased-boundaries.png height="500px" class="pixel")
 
 Here, each pixel is visualized as a square. A discrete pixel can only display a single color but
 pixels along shape boundaries overlap multiple (continuous) surfaces. Ideally the pixel color
@@ -3271,7 +3271,7 @@ offsets range within $[-0.5, 0.5]$ in both coordinate directions:
     [Listing [16-sample-aa]: <kbd>[shaders.wgsl]</kbd> 16 grid samples]
 
   ![Figure [16-sample-aa-aliased-boundaries]: Anti-aliasing with 16 regularly-spaced samples @ 400x300
-   ](../images/img-14-16-sample-aa.png height="500px")
+   ](../images/img-14-16-sample-aa.png height="500px" class="pixel")
 
 That's an improvement but we can do better. Instead of subdividing the pixel into 16
 regularly-spaced discrete regions (which is prone to the same sampling artifact), let's offset the
@@ -3405,7 +3405,7 @@ Now, the anti-aliased edges have a much more gradual transition and look a lot l
 to our previous 16-sample AA:
 
   ![Figure [randomized-ssaa-image]: Randomized sub-pixel supersampling @ 400x300
-   ](../images/img-15-random-subpixel-samples.png height="500px")
+   ](../images/img-15-random-subpixel-samples.png height="500px" class="pixel")
 
 We have successfully employed random sampling to compute the average color of visible surfaces
 within a single pixel. Next, we are going to apply the same tools to approximate the radiance that

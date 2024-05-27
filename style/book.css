@@ -174,8 +174,7 @@ div.indented {
 .md img {
     margin-top: 1em;
     width: 72ex;
-    /* image-rendering: crips-edges; */
-    image-rendering: pixelated;
+    image-rendering: crisp-edges;
 }
 
 .md video {
