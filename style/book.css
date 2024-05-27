@@ -14,12 +14,13 @@ div.indented {
     margin-left: 5ex;
 }
 
-
 /* -------------------------------------------------------------------------------------------------
 ** Table of Contents
 ** -----------------------------------------------------------------------------------------------*/
 
-.md .longTOC, .md .mediumTOC, .md .shortTOC {
+.md .longTOC,
+.md .mediumTOC,
+.md .shortTOC {
     font-family: sans-serif;
 }
 
@@ -37,10 +38,11 @@ div.indented {
     border-bottom: solid 4px #777;
 }
 
-.md .longTOC, .md .mediumTOC, .md .shortTOC {
+.md .longTOC,
+.md .mediumTOC,
+.md .shortTOC {
     font-family: sans-serif;
 }
-
 
 /* -------------------------------------------------------------------------------------------------
 ** Titles & Headers
@@ -66,13 +68,12 @@ div.indented {
 }
 
 .md h1::before {
-    content: counter(h1) ". ";
+    content: counter(h1) '. ';
 }
 
 .md h2::before {
-    content: counter(h1) "." counter(h2) ". ";
+    content: counter(h1) '.' counter(h2) '. ';
 }
-
 
 /* -------------------------------------------------------------------------------------------------
 ** Code
@@ -95,17 +96,19 @@ div.indented {
 
 .md pre.listing.tilde code {
     /* Only code in fenced blocks. */
-    letter-spacing: -0.20;
+    letter-spacing: -0.2;
     background: #e4e4e0;
 }
 
 /* Highlight.js Syntax Coloring */
 
 .hljs-built_in {
-    color: #2356FF;
+    color: #2356ff;
 }
 
-.hljs-params, .hljs-type, .hljs-literal {
+.hljs-params,
+.hljs-type,
+.hljs-literal {
     color: #a62;
 }
 
@@ -149,7 +152,7 @@ div.indented {
 
 .md code > .delete {
     text-decoration: line-through;
-    background-color: #;
+    background-color: #fdd;
     color: #a0a0a0;
     background: #e0cfcc;
 }
@@ -169,14 +172,14 @@ div.indented {
 ** -----------------------------------------------------------------------------------------------*/
 
 .md img {
-    margin-top: 1.0em;
+    margin-top: 1em;
     width: 72ex;
-    //image-rendering: crips-edges;
+    /* image-rendering: crips-edges; */
     image-rendering: pixelated;
 }
 
 .md video {
-    margin-top: 1.0em;
+    margin-top: 1em;
     width: 72ex;
 }
 
@@ -204,16 +207,13 @@ div.credit-list ul {
     column-count: 3;
 }
 
-
-
 /* -------------------------------------------------------------------------------------------------
 ** Print Styling
 ** -----------------------------------------------------------------------------------------------*/
 
 @media print {
-
     @page {
-        margin: 1.5cm 2.5cm 1.0cm 2.5cm;
+        margin: 1.5cm 2.5cm 1cm 2.5cm;
         size: letter portrait;
     }
 
