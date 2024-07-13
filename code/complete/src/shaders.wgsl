@@ -184,15 +184,15 @@ var<private> vertices: TriangleVertices = TriangleVertices(
   var path_length = 0u;
   while path_length < MAX_PATH_LENGTH {
     let hit = intersect_scene(ray);
-    if is_intersection_valid(hit) {
-      let scattered = scatter(ray, hit);
-      throughput *= scattered.attenuation;
-      ray = scattered.ray;
-    } else {
+    if !is_intersection_valid(hit) {
       // If no intersection was found, return the color of the sky and terminate the path.
       radiance_sample += throughput * sky_color(ray);
       break;
     }
+
+    let scattered = scatter(ray, hit);
+    throughput *= scattered.attenuation;
+    ray = scattered.ray;
     path_length += 1u;
   }
 

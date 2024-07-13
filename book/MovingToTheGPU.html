@@ -3757,15 +3757,15 @@ just the sky for now):
       var path_length = 0u;
       while path_length < MAX_PATH_LENGTH {
         let hit = intersect_scene(ray);
-        if is_intersection_valid(hit) {
-          let scattered = scatter(ray, hit);
-          throughput *= scattered.attenuation;
-          ray = scattered.ray;
-        } else {
+        if !is_intersection_valid(hit) {
           // If no intersection was found, return the color of the sky and terminate the path.
           radiance_sample += throughput * sky_color(ray);
           break;
         }
+
+        let scattered = scatter(ray, hit);
+        throughput *= scattered.attenuation;
+        ray = scattered.ray;
         path_length += 1u;
       }
 
@@ -3797,7 +3797,7 @@ limited (and quantized) precision inherent in floating point arithmetic: sometim
 intersection point doesn't fall precisely on the sphere surface and using it as the origin of the
 new ray causes the ray to intersect the sphere again near the same spot (in this case the point falls
 "beneath" the surface). The easiest way to deal with this is to reject intersections for values of $t$
-that are below a small offset:
+that are below a small offset ($\epsilon$ or _epsilon_):
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
     const FLT_MAX: f32 = 3.40282346638528859812e+38;
@@ -3839,11 +3839,8 @@ that are below a small offset:
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     [Listing [intersect-scene]: <kbd>[shaders.wgsl]</kbd> The intersect_scene function]
 
-TODO: the next sentence doesn't explain the reason for the select clearly. Not well phrased, especially the first part:
-
-By handling this in `intersect_sphere` we can ensure that both potential intersection points on a
-sphere get considered with a small threshold ($\epsilon$ or _epsilon_) in case the ray gets
-scattered _inside_ the sphere (which can happen if the material is glass). Following this change,
+This code considers both `t1` and `t2` as `t2` (the farther point) could be a valid intersection if
+the ray resulted from a surface refraction (e.g. for a glass-like material). Following this change,
 the rendering should look like this:
 
   ![Figure [invalid-scatter-without-shadow-acne]: Validating the path tracing loop
@@ -3854,8 +3851,8 @@ accurately represent effects like diffraction and interference. There are altern
 representations to handle such phenomena, for example by storing a power distribution across a
 spectrum of constituent wavelengths.
 
-Lambertian BRDF
----------------
+Diffuse BRDF
+------------
 TODO:
 
 Tone Mapping
