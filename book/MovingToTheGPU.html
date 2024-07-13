@@ -3855,65 +3855,10 @@ Diffuse BRDF
 ------------
 TODO:
 
-Tone Mapping
-------------
-
-- TODO: move relatively quickly through the different materials.
-- TODO: Recap the rendering equation and Monte Carlo. Explain the terms (lambert's projected area law).
-        Explain material evaluation and BSDF. Explain that different materials are modeled differently
-        and there's a lot of variety.
-- TODO: explain lambertian, glossy metal, mirror, and transmissive reflectance, fresnel term. Explain
-        we're going to only implement the simple materials from RTIOW but in practice these effects
-        can be combined.
-        * TODO: for lambertian: real diffuse objects are not lambertian, they become specular at grazing
-                angles
-        * TODO: mirror: same explanation from graphics codex about infinite impulse and not doing
-          Monte Carlo. procedural solution Also: perfect mirror reflection does not obey lambert's
-          law (?): "In the case of a mirror, we're evaluating perfect specular reflection of an
-          individual ray of light, not a beam."
-        * TODO: refraction, also procedural. Account for radiance scaling cf Veach98?
-- TODO: russian roulette
-- TODO: recommend reading https://boksajak.github.io/files/CrashCourseBRDF.pdf, Graphics Codex
-  materials chapter
-
-Interactive Camera
-====================================================================================================
-TODO: texture clearing
-
-Scene Building
-====================================================================================================
-
-Metal, Glass, Emissives
-====================================================================================================
-
-  ![Figure [videotest]: Video Test](../images/videotest.mp4 autoplay muted loop)
-
-Top-Level Acceleration Structure
-====================================================================================================
-
-TODO
-====
-- TODO: After BVH, importance sampling lights
-- Well-curated further reading list: TODO!!! check the existing resources in the wiki. Maybe this
-  should go there.
-- control-flow divergence and how it impacts parallelism. Short if statements and ternaries and what
-  they compile to.
-- TODO: clean up references
-- TODO: Performance comparison. Video from RTX 4090
-- TODO: divergence discussion
-
-
-Second book:
-- HDR bloom
-- cube map (and probabilities)
-- hardware rtx
-
                                (insert acknowledgments.md.html here)
 
 References
 ==========
-
-TODO: bibtex style bibliography?
 
 [#Marsaglia03]: George Marsaglia, [*Xorshift RNGs*](https://www.jstatsoft.org/article/download/v008i14/916), 2003
 
@@ -3931,15 +3876,10 @@ TODO: bibtex style bibliography?
 
 [#McGuire2024GraphicsCodex]: Morgan McGuire, *The Graphics Codex*, 2024
 
-TODO: hanrahan course on markov chain monte carlo PDF
-
 [^ericson]: C. Ericson, Real Time Collision Detection
 
 [^mcguire-codex]: https://graphicscodex.courses.nvidia.com/app.html
 
-
-TODO:
-- A Field Guide to BRDF Models, Stephen H. Westin Hongsong Li Kenneth E. Torrance 2004
 
 <!--
 @book{McGuire2024GraphicsCodex,
