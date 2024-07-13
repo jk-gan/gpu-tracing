@@ -3422,16 +3422,13 @@ Path Tracing
 ====================================================================================================
 The human visual system relies on our ability to detect and process light. What we perceive as
 color, shadows, transparency, reflections, and many other visual phenomena are the result of complex
-interactions of light with our environment and how our eyes and brain respond to it. Rendering these
-effects using a computer in a realistic way requires a practical model of the underlying physics.
-Even many stylized rendering applications that prioritize an artistic style over realism (such as
-Pixar's animations) often rely on physically based models for illumination.
+interactions of light. If we want to achieve realism, it makes sense to base our computations on the
+real-world physics of light.
 
-We'll start out a with a quick refresher of the basic theory behind physically based rendering. The
-following section is a bit abstract and dense in mathematical formalisms. You'll still be able to
-implement an impressive path tracer without having a complete grasp of the subject, so feel free to
-skip or skim through most of it. That said, the concepts introduced here form the basis for modern
-rendering and they will come in handy when we get to more advanced techniques later on.
+What comes next is a quick refresher of the basic theory behind physically based rendering. While
+it's somewhat dense in mathematical formalism, the concepts form the basis for modern rendering.
+You don't need a perfect grasp of the subject but the information will help explain some of the
+logic we'll add later on.
 
 After the refresher, we'll build the core of the path tracing algorithm and add a basic collection
 of materials.
@@ -3444,8 +3441,7 @@ Physically Based Rendering
 The basic idea is that different materials scatter light differently. For example, light arriving at
 matte wall paint generally scatters in all directions. A perfectly polished metal surface acts like a
 mirror and reflects all light in a specific direction. A transparent glass surface refracts and
-transmits light through, though it may also act like a mirror and reflect some of the light arriving
-at grazing angles.
+transmits light through, though it may also act like a mirror when viewed at a certain angle.
 
 Some materials are emissive and radiate visible light and act as _direct_ light sources.
 Non-emissive objects are also capable of illuminating other surfaces _indirectly_ by reflecting light
@@ -3458,18 +3454,17 @@ others, imparting what we perceive as color.
 After we cast a camera ray and find an intersection at point $X$ on a surface, we want a measurement
 of the radiance arriving from $X$ in the direction of the camera (opposite the ray direction).
 Radiance is only meaningful in the context of a scattering surface, so in order to be physically
-accurate, we'll imagine $X$ is a tiny patch of surface with infinitesimal area rather than a
-dimensionless point.
+accurate, we'll imagine $X$ is a tiny patch of surface instead of a dimensionless point.
 
-If the surface is on an object that emits light then we could return some value corresponding
+If the surface is on an object that emits light then we could return some value related
 to the power of its emission. If the surface material is not emissive then it should only be visible
 by scattering light from other sources. The amount scattered in a given direction depends on
 the material type. In order to compute the outgoing radiance, we need to figure out how much
 energy is arriving at this tiny patch of surface from all directions (known as irradiance) and the
 fraction of it that gets scattered specifically in the direction we're interested in.
 
-This overall computation has been formalized in the computer graphics literature in a general
-formula called the _rendering equation_:[^ch7-footnote1]
+This overall computation has been formalized in the computer graphics literature in a formula called
+the _rendering equation_:[^ch7-footnote1]
 
 $$ \Lo(X, \omega_o) = \Le(X, \omega_o) + \int_\Omega \Li(X, \omega_i) ~ f(X, \omega_i, \omega_o) ~ | \vec{\mathbf{N}} \cdot \omega_i | ~ d\omega_i $$
 
@@ -3487,7 +3482,7 @@ $\Omega$ represents the entire range of directions from which light can arrive a
 usually represented as a hemisphere centered at $X$ oriented towards the surface normal
 $\vec{\mathbf{N}}$ for reflective surfaces (more generally a sphere for surfaces that can both
 reflect and transmit light). It is measured as a solid angle and since there are infinitely many
-directions that light can arrive from, we integrate over infinitely many tiny solid angles
+directions that light can arrive from, we integrate over infinitely many differential solid angles
 $d\omega_i$ (hence $\int_\Omega ... d\omega_i$). In code, we are going to represent $\omega_i$ with
 a ray direction but we are going to pretend it is a cone with a tiny solid angle subtending another
 infinitesimal surface on some other object that illuminates it.
@@ -3541,9 +3536,8 @@ itself appears inside the integral, involving infinitely many nested integrals.
 People have developed numerous techniques over the last half-century to approximate the equation.
 The specific approach we're looking at, path tracing, numerically solves the integral using a
 so called _Markov Chain Monte Carlo_ algorithm. This method relies on evaluating the integrand
-over a series of random samples and taking their average (sound familiar?). For a function
-$f(x)$, the Monte Carlo estimator of its integral over interval $A$ using $N$ discrete samples is
-given as follows:
+over a series of random samples and taking their average. For a function $f(x)$, the Monte Carlo
+estimator of its integral over interval $A$ using $N$ discrete samples is given as follows:
 
 $$ \int_A f(x) ~ dx \approx \dfrac{1}{N}\sum_{\bar{\mathbf{x}}}^N \dfrac{f(\bar{\mathbf{x}})}{\rho(\bar{\mathbf{x}})} $$
 
@@ -3552,7 +3546,7 @@ a probability distribution. If we apply this to the rendering equation, we get:
 
 $$ \Lo(X, \omega_o) \approx \Le(X, \omega_o) + \dfrac{1}{N}\sum_{j}^N \dfrac{\Li(X, \omega_j) ~ f(X, \omega_j, \omega_o) ~ | \vec{\mathbf{N}} \cdot \omega_j |}{\rho(\omega_j)} $$
 
-Expanding the recursion, we end up with the following:
+Expanding $\Li$, we end up with
 
 $$ L_{Xe} + \dfrac{1}{N}\sum_{j}^N \dfrac{f_{Xj} ~ | \vec{\mathbf{N}} \cdot \omega_j |}{\rho_X(\omega_j)} \left[L_{Ye} + \dfrac{1}{N}\sum_{k}^N \dfrac{f_{Yk} ~ | \vec{\mathbf{N}} \cdot \omega_k |}{\rho_Y(\omega_k)} \left[L_{Ze} + \dfrac{1}{N}\sum_{l}^N \dfrac{f_{Zl} ~ | \vec{\mathbf{N}} \cdot \omega_l |}{\rho_Z(\omega_l)} ~ ...\right]\right]$$
 
@@ -3845,6 +3839,8 @@ that are below a small offset:
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     [Listing [intersect-scene]: <kbd>[shaders.wgsl]</kbd> The intersect_scene function]
 
+TODO: the next sentence doesn't explain the reason for the select clearly. Not well phrased, especially the first part:
+
 By handling this in `intersect_sphere` we can ensure that both potential intersection points on a
 sphere get considered with a small threshold ($\epsilon$ or _epsilon_) in case the ray gets
 scattered _inside_ the sphere (which can happen if the material is glass). Following this change,
@@ -3857,6 +3853,63 @@ the rendering should look like this:
 accurately represent effects like diffraction and interference. There are alternative
 representations to handle such phenomena, for example by storing a power distribution across a
 spectrum of constituent wavelengths.
+
+Lambertian BRDF
+---------------
+TODO:
+
+Tone Mapping
+------------
+
+- TODO: move relatively quickly through the different materials.
+- TODO: Recap the rendering equation and Monte Carlo. Explain the terms (lambert's projected area law).
+        Explain material evaluation and BSDF. Explain that different materials are modeled differently
+        and there's a lot of variety.
+- TODO: explain lambertian, glossy metal, mirror, and transmissive reflectance, fresnel term. Explain
+        we're going to only implement the simple materials from RTIOW but in practice these effects
+        can be combined.
+        * TODO: for lambertian: real diffuse objects are not lambertian, they become specular at grazing
+                angles
+        * TODO: mirror: same explanation from graphics codex about infinite impulse and not doing
+          Monte Carlo. procedural solution Also: perfect mirror reflection does not obey lambert's
+          law (?): "In the case of a mirror, we're evaluating perfect specular reflection of an
+          individual ray of light, not a beam."
+        * TODO: refraction, also procedural. Account for radiance scaling cf Veach98?
+- TODO: russian roulette
+- TODO: recommend reading https://boksajak.github.io/files/CrashCourseBRDF.pdf, Graphics Codex
+  materials chapter
+
+Interactive Camera
+====================================================================================================
+TODO: texture clearing
+
+Scene Building
+====================================================================================================
+
+Metal, Glass, Emissives
+====================================================================================================
+
+  ![Figure [videotest]: Video Test](../images/videotest.mp4 autoplay muted loop)
+
+Top-Level Acceleration Structure
+====================================================================================================
+
+TODO
+====
+- TODO: After BVH, importance sampling lights
+- Well-curated further reading list: TODO!!! check the existing resources in the wiki. Maybe this
+  should go there.
+- control-flow divergence and how it impacts parallelism. Short if statements and ternaries and what
+  they compile to.
+- TODO: clean up references
+- TODO: Performance comparison. Video from RTX 4090
+- TODO: divergence discussion
+
+
+Second book:
+- HDR bloom
+- cube map (and probabilities)
+- hardware rtx
 
                                (insert acknowledgments.md.html here)
 
@@ -3880,6 +3933,8 @@ TODO: bibtex style bibliography?
 [#Lambert1760]: Johann Heinrich Lambert, *Photometria sive de mensura et gradibus luminis, colorum et umbrae*, 1760. Courtesy of ETH-Bibliothek Zürich, Switzerland.
 
 [#McGuire2024GraphicsCodex]: Morgan McGuire, *The Graphics Codex*, 2024
+
+TODO: hanrahan course on markov chain monte carlo PDF
 
 [^ericson]: C. Ericson, Real Time Collision Detection
 
