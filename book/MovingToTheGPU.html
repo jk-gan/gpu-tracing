@@ -3683,9 +3683,9 @@ follows the same rules in both incident and outgoing light directions. Our `scat
 the same way and allows the `input_ray` parameter to be either an incident or a scattered light
 direction.
 
-We'll start with a simple but unrealistic scattering function that always picks the surface
-normal as the output direction. This isn't a realistic scattering distribution but it's useful
-for validating our initial code:
+Let's make the scattering function reflect the ray around the normal, just like a mirror. We can use
+a handy shader instrinsic called `reflect` to compute the reflection vector:
+
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
     ...
@@ -3698,8 +3698,9 @@ for validating our initial code:
     }
 
     fn scatter(input_ray: Ray, hit: Intersection) -> Scatter {
-      let output_ray = Ray(point_on_ray(input_ray, hit.t), hit.normal);
-      let attenuation = vec3(0.8);
+      let reflected = reflect(input_ray.direction, hit.normal);
+      let output_ray = Ray(point_on_ray(input_ray, hit.t), reflected);
+      let attenuation = vec3(0.4);
       return Scatter(attenuation, output_ray);
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
@@ -3714,7 +3715,7 @@ for validating our initial code:
     [Listing [intersect-scene]: <kbd>[shaders.wgsl]</kbd> The intersect_scene function]
 
 
-The returned attenuation factor of $0.8$ means that the material absorbs 20% of the incoming
+The returned attenuation factor of $0.4$ means that the material absorbs 60% of the incoming
 radiance (in all color channels) and scatters the rest. The last equation from
 Section [physically based rendering] is expressed in a recursive form but WGSL doesn't allow any
 form of recursion (GPUs generally don't support it). That's not a huge issue since we can calculate
@@ -3785,16 +3786,15 @@ source  (which can happen with certain types of geometry). Running this program 
 image:
 
   ![Figure [invalid-scatter-with-shadow-acne]: Validating the path tracing loop (with shadow acne)
-   ](../images/img-17-invalid-scatter-with-shadow-acne.png)
+   ](../images/img-18-mirror-reflection-with-shadow-acne.png)
 
-Even though the scattering is unrealistic, we can see reflections, a little bit of shadowing, and an
-overall bluish tint that the sky casts on both spheres. Though, there are some nasty circular bands
-on both spheres due to an artifact called "shadow acne" or "self-shadowing". This happens due to the
-limited (and quantized) precision inherent in floating point arithmetic: sometimes the computed
-intersection point doesn't fall precisely on the sphere surface and using it as the origin of the
-new ray causes the ray to intersect the sphere again near the same spot (in this case the point falls
-"beneath" the surface). The easiest way to deal with this is to reject intersections for values of $t$
-that are below a small offset ($\epsilon$ or _epsilon_):
+We can see some reflections but there are some nasty circular bands. This artifact (called
+"shadow acne" or "self-shadowing") is caused by the limited (and quantized) precision in herent in
+floating point arithmetic. Sometimes the computed intersection point doesn't fall precisely on the
+sphere surface, which can cause the new ray (originating from that point) to re-intersect the sphere.
+
+An easy way to deal with this is to reject intersections for values of $t$ that are below a small
+offset ($\epsilon$ or _epsilon_):
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
     const FLT_MAX: f32 = 3.40282346638528859812e+38;
@@ -3841,14 +3841,18 @@ the ray resulted from a surface refraction (e.g. for a glass-like material). Fol
 the rendering should look like this:
 
   ![Figure [invalid-scatter-without-shadow-acne]: Validating the path tracing loop
-   ](../images/img-18-invalid-scatter-without-shadow-acne.png)
+   ](../images/img-19-mirror-reflection-no-acne.png)
+
+That looks much cleaner. We can see reflections now and both spheres have acquired a blue tint from
+light paths that reach the sky.
+
 
 [^ch7-footnote3]: This RGB representation is simple and works well for most cases but cannot
 accurately represent effects like diffraction and interference. There are alternative
 representations to handle such phenomena, for example by storing a power distribution across a
 spectrum of constituent wavelengths.
 
-Diffuse BRDF
+Tone Mapping
 ------------
 TODO:
 
