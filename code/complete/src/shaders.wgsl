@@ -209,6 +209,7 @@ var<private> vertices: TriangleVertices = TriangleVertices(
   let new_sum = radiance_sample + old_sum;
   textureStore(radiance_samples_new, vec2u(pos.xy), vec4(new_sum, 0.));
 
-  // Display the average.
-  return vec4(new_sum / f32(uniforms.frame_count), 1.);
+  // Display the average after gamma correction (gamma = 2.2)
+  let color = new_sum / f32(uniforms.frame_count);
+  return vec4(pow(color, vec3(1. / 2.2)), 1.);
 }

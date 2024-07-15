@@ -3,7 +3,7 @@
 <link rel="icon" type="image/png" href="../favicon.png">
 <!-- Markdeep: https://casual-effects.com/markdeep/ -->
 
-                                      **Ray Tracing on a GPU**
+                                    **Ray Tracing: GPU Edition**
                                            [Arman Uguray][]
                                                 <br>
                                                 Draft
@@ -3840,11 +3840,58 @@ This code considers both `t1` and `t2` as `t2` (the farther point) could be a va
 the ray resulted from a surface refraction (e.g. for a glass-like material). Following this change,
 the rendering should look like this:
 
-  ![Figure [invalid-scatter-without-shadow-acne]: Validating the path tracing loop
+  ![Figure [shadow-acne-fixed]: Validating the path tracing loop
    ](../images/img-19-mirror-reflection-no-acne.png)
 
-That looks much cleaner. We can see reflections now and both spheres have acquired a blue tint from
-light paths that reach the sky.
+That looks much cleaner. Some reflections are visible and both spheres have acquired a blue tint
+where light paths eventually reach the sky. Some light paths bounce back and forth between both
+spheres. Each bounce is an "absorption event" that decreases the path throughput. The image looks
+darker with more absorptions, which is most apparent where the two spheres meet.
+
+Gamma Correction
+----------------
+Right now, this image looks a bit too dark. The perceived brightness (or luminance) of a pixel
+should ideally scale linearly with the stored radiance value. In other words, if a material absorbs
+50% of the radiance arriving directly from the sky, it should appear half as dark as the sky.
+However, the reflections of both spheres become nearly invisible after only three ray bounces.
+
+This is because the surface texture expects pixel values to be _gamma encoded_. Our eyes are more
+sensitive to changes in dark tones than they are to similar changes in bright tones. Given that
+we only have a fixed range to represent pixel's luminance ($\[0, 1\]$), it is more efficient (in
+terms of storage) to allocate a bigger numerical range for smaller radiance values. This is how
+digital images usually get stored and virtually all displays apply _gamma correction_ while
+converting pixel values to light.[^ch7-footnote4]
+
+The formula for gamma ($\gamma$) encoding is $V_{out} = V_{in}^{\frac{1}{\gamma}}$. We can apply
+this function in the fragment shader right before outputting the color:
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+    @fragment fn display_fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+      ...
+      // Compute and store the new sum.
+      let new_sum = radiance_sample + old_sum;
+      textureStore(radiance_samples_new, vec2u(pos.xy), vec4(new_sum, 0.));
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL highlight
+      // Display the average after gamma correction (gamma = 2.2)
+      let color = new_sum / f32(uniforms.frame_count);
+      return vec4(pow(color, vec3(1. / 2.2)), 1.);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [gamma-2.2]: <kbd>[shaders.wgsl]</kbd> Encoding a pixel with $\gamma = 2.2$]
+
+The gamma corrected output should look like this:
+
+  ![Figure [gamma-correction]: Gamma-correction](../images/img-20-gamma-correction.png)
+
+
+Some platforms support textures with a _sRGB_ format. Pixels automatically undergo gamma compression
+(or decompression) upon writes and reads to sRGB textures. You can try this yourself: instead of
+applying gamma correction in the shader, change all instances of `Rgba8Unorm` and `Bgra8Unorm` in
+`src/main.rs` and `src/render.rs` to `Rgba8UnormSrgb` and `Bgra8UnormSrgb`. You should see a similar
+result if your platform supports sRGB surfaces.
 
 
 [^ch7-footnote3]: This RGB representation is simple and works well for most cases but cannot
@@ -3852,9 +3899,8 @@ accurately represent effects like diffraction and interference. There are altern
 representations to handle such phenomena, for example by storing a power distribution across a
 spectrum of constituent wavelengths.
 
-Tone Mapping
-------------
-TODO:
+[^ch7-footnote4]: [_Understanding Gamma Correction_](https://www.cambridgeincolour.com/tutorials/gamma-correction.htm)
+(by Cambridge in Color) is a great short read on the topic.
 
                                (insert acknowledgments.md.html here)
 
