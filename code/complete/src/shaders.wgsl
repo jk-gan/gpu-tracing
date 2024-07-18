@@ -7,15 +7,20 @@ const EPSILON: f32 = 1e-3;
 const MAX_PATH_LENGTH: u32 = 13u;
 
 struct Uniforms {
+  camera: CameraUniforms,
   width: u32,
   height: u32,
   frame_count: u32,
 }
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
+struct CameraUniforms {
+  origin: vec3f,
+}
+
 struct Rng {
   state: u32,
-};
+}
 var<private> rng: Rng;
 
 fn init_rng(pixel: vec2u) {
@@ -169,7 +174,7 @@ var<private> vertices: TriangleVertices = TriangleVertices(
 @fragment fn display_fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   init_rng(vec2u(pos.xy));
 
-  let origin = vec3(0.);
+  let origin = uniforms.camera.origin;
   let focus_distance = 1.;
   let aspect_ratio = f32(uniforms.width) / f32(uniforms.height);
 

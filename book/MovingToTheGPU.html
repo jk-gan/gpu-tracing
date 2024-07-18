@@ -1553,8 +1553,7 @@ encoding the draw:
         }
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [display-bind-group]: <kbd>[render.rs]</kbd>
-     Creating and using the display bind group]
+    [Listing [display-bind-group]: <kbd>[render.rs]</kbd> Creating and using the display bind group]
 
 Running the program now should bring up the same picture as before. The viewport dimensions are
 still hardcoded in two places so let's clean that up by making the viewport width and height
@@ -1719,8 +1718,7 @@ to our new camera coordinate space:
       ...
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [camera-ray-computation]:
-     <kbd>[shaders.wgsl]</kbd> Obtaining the viewport vector]
+    [Listing [camera-ray-computation]: <kbd>[shaders.wgsl]</kbd> Obtaining the viewport vector]
 
 
 We now have a vector $\vec{\mathbf{uv}}$ that spans from the center of the viewport to the pixel
@@ -1758,8 +1756,7 @@ In the code, I'll refer to $f$ as `focus_distance`:
       ...
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [camera-ray-computation]:
-     <kbd>[shaders.wgsl]</kbd> Deriving the camera ray origin and direction]
+    [Listing [camera-ray-computation]: <kbd>[shaders.wgsl]</kbd> Deriving the camera ray origin and direction]
 
 We finally have our camera ray. Initially we can make all rays hit the sky which will act as
 the light source. We can make the sky appear a little more realistic by painting it with a
@@ -1805,8 +1802,7 @@ fragment color. I used the same colors as RTIOW but you can use different ones:[
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [camera-ray-computation]:
-     <kbd>[shaders.wgsl]</kbd> Deriving the camera ray origin and direction]
+    [Listing [camera-ray-computation]: <kbd>[shaders.wgsl]</kbd> Deriving the camera ray origin and direction]
 
 Running the program now should produce an image that looks like this:
 
@@ -1910,8 +1906,7 @@ sphere. Let's also define a new type called `Sphere` to represent the object:
     }
     ...
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [ray-sphere-intersection]:
-     <kbd>[shaders.wgsl]</kbd> The `intersect_sphere` function]
+    [Listing [ray-sphere-intersection]: <kbd>[shaders.wgsl]</kbd> The `intersect_sphere` function]
 
 
 Let's now add a single sphere to the scene. First we'll test the sphere for an intersection with
@@ -1941,8 +1936,7 @@ enough away from the view origin so that the camera doesn't fall inside the sphe
       return vec4(sky_color(ray), 1.);
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [single-sphere]:
-     <kbd>[shaders.wgsl]</kbd> First intersection test]
+    [Listing [single-sphere]: <kbd>[shaders.wgsl]</kbd> First intersection test]
 
 This should render a solid circle that looks like this:
 
@@ -3036,8 +3030,7 @@ create two bind groups with the textures swapped and alternate those at render t
         ]
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [textures-bind-groups]:
-     <kbd>[render.rs]</kbd> Bind groups with different texture assignments]
+    [Listing [textures-bind-groups]: <kbd>[render.rs]</kbd> Bind groups with different texture assignments]
 
 Now, let's update the shader:
 
@@ -3956,8 +3949,7 @@ This begs the question: what is the ideal value for `MAX_PATH_LENGTH`? The answe
 number of factors, but it mainly comes down to the scene and performance expectations. Fewer
 bounces means less computation but potentially incorrect images. More bounces means more light
 paths get explored but more compututation is necessary. It also increases the chances of wasted work
-on paths that don't contribute significantly to the final image. We'll revisit this topic again
-later.
+on paths that don't contribute significantly to the final image. We'll revisit this topic later.
 
 
 Colored Spheres
@@ -3989,7 +3981,7 @@ now, let's add an additional field to the `Sphere` structure to hold a shape's c
 
 
 The RGB triplet can directly represent the attenuation factor for a given sphere. Let's have the
-intersection routine return the color of a sphere and use color in the scattering function:
+intersection routine return the color of a sphere and use that color in the scattering function:
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
     ...
@@ -4037,6 +4029,457 @@ intersection routine return the color of a sphere and use color in the scatterin
 
 
   ![Figure [colored-spheres]: Spheres with different colors](../images/img-23-colored-spheres.png)
+
+
+Interactive Camera
+====================================================================================================
+So far, we've been looking at spheres from a fixed position and it would be nice to be able to move
+around. In order to reposition the camera with user input, we need a representation of the camera
+state that is shared between the CPU and GPU sides of the program.
+
+In our GPU code, we have relied on built-in vector algebra primitives (such as `vec3`) provided by
+WGSL. We need similar primitives on the CPU side as well, as they will come in handy to update
+camera parameters in response to input events. To that end, we'll be adding a new `algebra` module
+for linear algebra utilities:
+
+<script type="preformatted">
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
+    use {
+        bytemuck::{Pod, Zeroable},
+        std::ops,
+    };
+
+    #[derive(Debug, Copy, Clone, Pod, Zeroable)]
+    #[repr(C)]
+    pub struct Vec3([f32; 3]);
+
+    impl Default for Vec3 {
+        fn default() -> Self {
+            Self::zero()
+        }
+    }
+
+    impl Vec3 {
+        pub fn new(x: f32, y: f32, z: f32) -> Vec3 {
+            Vec3([x, y, z])
+        }
+
+        pub fn all(v: f32) -> Vec3 {
+            Vec3([v, v, v])
+        }
+
+        pub fn zero() -> Vec3 {
+            Vec3([0., 0., 0.])
+        }
+
+        #[inline(always)]
+        pub fn x(&self) -> f32 {
+            self.0[0]
+        }
+
+        #[inline(always)]
+        pub fn y(&self) -> f32 {
+            self.0[1]
+        }
+
+        #[inline(always)]
+        pub fn z(&self) -> f32 {
+            self.0[2]
+        }
+
+        pub fn length(&self) -> f32 {
+            self.length_squared().sqrt()
+        }
+
+        pub fn length_squared(&self) -> f32 {
+            self.dot(self)
+        }
+
+        pub fn dot(&self, rhs: &Vec3) -> f32 {
+            self.x() * rhs.x() + self.y() * rhs.y() + self.z() * rhs.z()
+        }
+
+        pub fn cross(&self, rhs: &Vec3) -> Vec3 {
+            Vec3([
+                self.y() * rhs.z() - self.z() * rhs.y(),
+                self.z() * rhs.x() - self.x() * rhs.z(),
+                self.x() * rhs.y() - self.y() * rhs.x(),
+            ])
+        }
+
+        pub fn normalized(&self) -> Vec3 {
+            self * self.length().recip()
+        }
+    }
+
+    // Automatically generate operator overloads for all value and borrow type combinations,
+    // using the same code block as the body.
+    macro_rules! impl_binary_op {
+        ($op:tt : $method:ident => (
+               $lhs_i:ident : $lhs_t:path,
+               $rhs_i:ident : $rhs_t:path
+            ) -> $return_t:path $body:block
+        ) => {
+            impl ops::$op<$rhs_t> for $lhs_t {
+                type Output = $return_t;
+                fn $method(self, $rhs_i: $rhs_t) -> $return_t {
+                    let $lhs_i = self;
+                    $body
+                }
+            }
+            impl ops::$op<&$rhs_t> for $lhs_t {
+                type Output = $return_t;
+                fn $method(self, $rhs_i: &$rhs_t) -> $return_t {
+                    let $lhs_i = self;
+                    $body
+                }
+            }
+            impl ops::$op<$rhs_t> for &$lhs_t {
+                type Output = $return_t;
+                fn $method(self, $rhs_i: $rhs_t) -> $return_t {
+                    let $lhs_i = self;
+                    $body
+                }
+            }
+            impl ops::$op<&$rhs_t> for &$lhs_t {
+                type Output = $return_t;
+                fn $method(self, $rhs_i: &$rhs_t) -> $return_t {
+                    let $lhs_i = self;
+                    $body
+                }
+            }
+        };
+    }
+
+    impl_binary_op!(Add : add => (lhs: Vec3, rhs: Vec3) -> Vec3 {
+        Vec3([
+            lhs.x() + rhs.x(),
+            lhs.y() + rhs.y(),
+            lhs.z() + rhs.z(),
+        ])
+    });
+
+    impl_binary_op!(Sub : sub => (lhs: Vec3, rhs: Vec3) -> Vec3 {
+        Vec3([
+            lhs.x() - rhs.x(),
+            lhs.y() - rhs.y(),
+            lhs.z() - rhs.z(),
+        ])
+    });
+
+    impl_binary_op!(Mul : mul => (lhs: Vec3, rhs: f32) -> Vec3 {
+        Vec3([
+            lhs.x() * rhs,
+            lhs.y() * rhs,
+            lhs.z() * rhs,
+        ])
+    });
+
+    impl_binary_op!(Mul : mul => (lhs: f32, rhs: Vec3) -> Vec3 {
+        Vec3([
+            rhs.x() * lhs,
+            rhs.y() * lhs,
+            rhs.z() * lhs,
+        ])
+    });
+
+    impl_binary_op!(Div : div => (lhs: Vec3, rhs: f32) -> Vec3 {
+        Vec3([
+            lhs.x() / rhs,
+            lhs.y() / rhs,
+            lhs.z() / rhs,
+        ])
+    });
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [algebra-module]: <kbd>[algebra.rs]</kbd> Utility code for vector algebra]
+</script>
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+    ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
+    mod algebra;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+    mod render;
+
+    const WIDTH: u32 = 800;
+    const HEIGHT: u32 = 600;
+    ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [algebra-module-decl]: <kbd>[main.rs]</kbd> Declare the `algebra` module]
+
+`algebra.rs` defines a single type: `Vec3`. As its name suggests, this type represents a
+3-dimensional vector with three 32-bit floating point components. `Vec3` defines methods for vector
+operations and binary operator overloads for component-wise arithmetic (+, -, *, /).[^ch8-footnote1]
+The memory layout of a `Vec3` consists of three contiguous `f32`'s (taking up 12 bytes) which
+exactly matches the layout of the WGSL `vec3f` type.
+
+Uniforms and Alignment
+----------------------
+Since we want to share state across the CPU and GPU sides, it makes sense to extend our uniform
+buffer to hold the camera parameters. Let's define a new `CameraUniforms` structure that stores the
+camera position:
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+    ...
+    struct Uniforms {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL highlight
+      camera: CameraUniforms,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+      width: u32,
+      height: u32,
+      frame_count: u32,
+    }
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL highlight
+    struct CameraUniforms {
+      origin: vec3f,
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+    ...
+    @fragment fn display_fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+      init_rng(vec2u(pos.xy));
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL highlight
+      let origin = uniforms.camera.origin;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+      let focus_distance = 1.;
+      ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [apply-sphere-color]: <kbd>[shaders.wgsl]</kbd> Use sphere color to attenuate throughput]
+
+We need to mirror these changes on the CPU side. Let's introduce a new Rust module called `camera`
+to contain all camera related code.
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
+    use bytemuck::{Pod, Zeroable};
+
+    use crate::algebra::Vec3;
+
+    #[derive(Debug, Copy, Clone, Pod, Zeroable)]
+    #[repr(C)]
+    pub struct CameraUniforms {
+        origin: Vec3,
+    }
+
+    pub struct Camera {
+        uniforms: CameraUniforms,
+    }
+
+    impl Camera {
+        pub fn new(origin: Vec3) -> Camera {
+            Camera {
+                uniforms: CameraUniforms { origin },
+            }
+        }
+
+        pub fn uniforms(&self) -> &CameraUniforms {
+            &self.uniforms
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [camera-module]: <kbd>[camera.rs]</kbd> The `camera` module]
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+    ...
+    mod algebra;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
+    mod camera;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+    mod render;
+
+    const WIDTH: u32 = 800;
+    const HEIGHT: u32 = 600;
+    ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [camera-module-decl]: <kbd>[main.rs]</kbd> Declare the `camera` module]
+
+The module defines two structs: `CameraUniforms` and `Camera`. `CameraUniforms` is going to contain
+only the state that will be shared with the GPU, while `Camera` is meant to be a higher level
+wrapper that can contain additional variables. For now, the only state is the camera origin so the
+contents are fairly simple.
+
+Finally, let's update our CPU-side `Uniforms` struct to match the GPU side by including
+`CameraUniforms`. We'll also reposition the camera origin to verify our changes:
+
+<script type="preformatted">
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+    use bytemuck::{Pod, Zeroable};
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
+    use crate::{
+        algebra::Vec3,
+        camera::{Camera, CameraUniforms},
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+    ...
+    #[derive(Copy, Clone, Pod, Zeroable)]
+    #[repr(C)]
+    struct Uniforms {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
+        camera: CameraUniforms,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+        width: u32,
+        height: u32,
+        frame_count: u32,
+    }
+
+    impl PathTracer {
+        pub fn new(
+            device: wgpu::Device,
+            queue: wgpu::Queue,
+            width: u32,
+            height: u32,
+        ) -> PathTracer {
+            device.on_uncaptured_error(Box::new(|error| {
+                panic!("Aborting due to an error: {}", error);
+            }));
+
+            let shader_module = compile_shader_module(&device);
+            let (display_pipeline, display_layout) =
+                create_display_pipeline(&device, &shader_module);
+
+            // Initialize the uniform buffer.
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
+            let camera = Camera::new(Vec3::new(0., -0.5, 1.));
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+            let uniforms = Uniforms {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
+                camera: *camera.uniforms(),
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+                width,
+                height,
+                frame_count: 0,
+            };
+            let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("uniforms"),
+                size: std::mem::size_of::<Uniforms>() as u64,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            ...
+        }
+        ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [camera-module-decl]: <kbd>[renderer.rs]</kbd> Update the `Uniforms` struct with camera parameters]
+</script>
+
+When you run this code, wgpu should return an API validation error that says "_Buffer is bound with
+size 24 where the shader expects 32_." 24 bytes looks correct at first glance: 12 bytes for a `Vec3`
+(4 bytes each for 3 `f32`s), and 3 `u32`s for the `width`, `height`, and `frame_count` fields, each
+taking up 4 bytes. The error message says the shader declared a 32-byte struct, so where do the 8
+missing bytes come from? The answer is _implicit padding_ inserted by WGSL to satisfy alignment
+requirements.
+
+Computers access memory more efficiently if the memory address of the accessed data is aligned to
+certain multiples of the processor word size. WGSL defines specific rules for its scalar and vector
+types[^ch8-footnote2] and it expects the memory layout of bound data structures to adhere to those
+rules (see Table [scalar-and-vector-alignment]).
+
+
+     Type | Alignment | Size  
+    :----:|:---------:|:----:
+    **u32, f32** |     4     | 4
+      **vec2**   |     8     | 8
+      **vec3**   |    16     | 12
+      **vec4**   |    16     | 16
+    [Table [scalar-and-vector-alignment]: Alignment and data sizes for scalar and vector types.]
+
+The alignment of a struct is equal to the largest alignment among its members. The size of a struct
+is defined as the sum of the sizes of its members, rounded up to a multiple of its alignment.
+Before our last change, the `Uniforms` struct had 4-byte alignment and occupied 12 bytes in size.
+
+We introduced the `CameraUniforms` structure, which has a single member of type `vec3f` and
+therefore 16-byte alignment. `vec3f` is 12 bytes in size, so the struct is _padded_ with 4 bytes
+do bring its size up to 16. While WGSL does this implicitly, we need to explicitly add padding on
+the Rust side.
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+    ...
+    #[derive(Debug, Copy, Clone, Pod, Zeroable)]
+    #[repr(C)]
+    pub struct CameraUniforms {
+        origin: Vec3,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
+        _pad: u32,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+    }
+
+    impl Camera {
+        pub fn new(origin: Vec3) -> Camera {
+            Camera {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
+                uniforms: CameraUniforms { origin, _pad: 0 },
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+            }
+        }
+
+        pub fn uniforms(&self) -> &CameraUniforms {
+            &self.uniforms
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [camera-uniforms-padded]: <kbd>[camera.rs]</kbd> `CameraUniforms` explicitly padded]
+
+We then added new member with type `CameraUniforms` to `Uniforms`. That increased the latter's
+alignment to 16 and brought its size up to 28 bytes. 28 is not a multiple of the new alignment and
+the next closest multiple is 32. Therefore we need to pad `Uniforms` with 4 additional bytes:
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+    ...
+    #[derive(Copy, Clone, Pod, Zeroable)]
+    #[repr(C)]
+    struct Uniforms {
+        camera: CameraUniforms,
+        width: u32,
+        height: u32,
+        frame_count: u32,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
+        _pad: 0,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+    }
+
+    impl PathTracer {
+        pub fn new(
+            device: wgpu::Device,
+            queue: wgpu::Queue,
+            width: u32,
+            height: u32,
+        ) -> PathTracer {
+            ...
+            // Initialize the uniform buffer.
+            let camera = Camera::new(Vec3::new(0., -0.5, 1.));
+            let uniforms = Uniforms {
+                camera: *camera.uniforms(),
+                width,
+                height,
+                frame_count: 0,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
+                _pad: 0,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+            };
+            ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [uniforms-padded]: <kbd>[render.rs]</kbd> `Uniforms` explicitly padded]
+
+The padding is currently wasted space but we can make use of it in the future. Running the program
+should now pass validation and render an image that looks like this:
+
+  ![Figure [repositioned-camera-origin]: Camera origin repositioned](../images/img-24-camera-origin-repositioned.png)
+
+
+[^ch8-footnote1]: In Rust, operators get overloaded using traits (`std::ops::Add`, `std::ops::Sub`,
+`std::ops::Mul`, `std::ops::Div`, etc). The operator traits are parameterized on value types (such
+as `fn add(self, rhs: RHS) -> Output` in `std::ops::Add`) and don't automatically extend to
+invocations on borrows.For example, `a + b`, where `a` and `b` are both `Vec3`, is different from
+`a + &b`, `&a + b`, and `&a + &b`. The `impl_binary_op` macro automatically implements the traits
+for all of these combinations for convenience.
+
+[^ch8-footnote2]: The alignment and size requirements for WGSL types are defined at
+https://www.w3.org/TR/WGSL/#alignment-and-size.
 
                                (insert acknowledgments.md.html here)
 
