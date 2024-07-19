@@ -4107,7 +4107,7 @@ for linear algebra utilities:
             ])
         }
 
-        pub fn normalized(&self) -> Vec3 {
+        pub fn normalized(self) -> Vec3 {
             self * self.length().recip()
         }
     }
@@ -4470,7 +4470,6 @@ should now pass validation and render an image that looks like this:
 
   ![Figure [repositioned-camera-origin]: Camera origin repositioned](../images/img-24-camera-origin-repositioned.png)
 
-
 [^ch8-footnote1]: In Rust, operators get overloaded using traits (`std::ops::Add`, `std::ops::Sub`,
 `std::ops::Mul`, `std::ops::Div`, etc). The operator traits are parameterized on value types (such
 as `fn add(self, rhs: RHS) -> Output` in `std::ops::Add`) and don't automatically extend to
@@ -4480,6 +4479,178 @@ for all of these combinations for convenience.
 
 [^ch8-footnote2]: The alignment and size requirements for WGSL types are defined at
 https://www.w3.org/TR/WGSL/#alignment-and-size.
+
+Basis Vectors
+-------------
+We can reposition the camera origin but the viewport always faces the $-z$-axis in camera
+coordinates (see Figure [camera-view-space]). We currently generate all camera ray directions
+relative to this arrangement in the scene coordinate system. In order to support arbitrary view
+directions, we need a way to generate rays in camera coordinates and somehow rotate them to be
+aligned with the camera orientation within the scene coordinate system.
+
+We can achieve this with a _change of basis_. The 3 coordinate axes of a
+3D (Euclidean) coordinate space can be defined in terms of 3 basis vectors that are orthogonal
+to each other, for example our scene coordinates are relative to
+$x = \begin{bmatrix} 1 \\ 0 \\ 0 \end{bmatrix}$,
+$y = \begin{bmatrix} 0 \\ 1 \\ 0 \end{bmatrix}$,
+$z = \begin{bmatrix} 0 \\ 0 \\ 1 \end{bmatrix}$. Suppose we define the basis vectors vectors of
+the camera coordinate space as $\vec{\textbf{u}}$ ($x$-coordinate pointing to the right),
+$\vec{\textbf{v}}$ ($y$-coordinate pointing up), and $\vec{\textbf{w}}$ ($z$-coordinate pointing
+forward, towards the viewport). We can then transform a ray direction vector from camera coordinates
+to the scene coordinate space by multiplying it by the matrix:
+
+  $$
+     \begin{bmatrix}
+     u.x & v.x & w.x \\
+     u.y & v.y & w.y \\
+     u.z & v.z & w.z
+     \end{bmatrix}
+  $$
+
+$\vec{\textbf{u}}$, $\vec{\textbf{v}}$, and $\vec{\textbf{w}}$ have to be unit vectors and
+orthogonal. Instead of specifying them directly, we will compute them from three parameters:
+the camera origin, a second point the camera should "look at", and an "up" direction. The
+vector pointing from the origin to the point being "looked at" is the view direction
+$\vec{\textbf{w}}$. The cross product of two vectors yields another vector that is orthogonal to
+the plane formed by original two, so once we know $\vec{\textbf{w}}$, we can compute the other
+two basis vectors using a series of cross products:
+
+  $$
+  \begin{aligned}
+  \vec{\textbf{u}} &= \vec{\textbf{w}} \times \vec{\textbf{up}} \\
+  \vec{\textbf{v}} &= \vec{\textbf{u}} \times \vec{\textbf{w}} 
+  \end{aligned}
+  $$
+
+  ![Figure [camera-basis-vectors]: Camera basis vectors in relation to camera parameters
+   ](../images/fig-12-camera-basis-vectors.svg)
+
+Let's start by updating the WGSL. We'll extend the `CameraUniforms` structure to hold the basis
+vectors in addition to the origin. We'll construct a 3x3 matrix out of the basis vectors and use
+that to transform the ray which we currently compute in camera space. Note that the $z$-coordinate
+of the camera ray direction no longer needs to be negative, since it's now defined with respect to
+$\vec{\textbf{w}}$.
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+    ...
+    struct CameraUniforms {
+      origin: vec3f,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL highlight
+      u: vec3f,
+      v: vec3f,
+      w: vec3f,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+    }
+    ...
+    @fragment fn display_fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+      init_rng(vec2u(pos.xy));
+
+      let origin = uniforms.camera.origin;
+      let focus_distance = 1.;
+
+      // Offset and normalize the viewport coordinates of the ray.
+      let offset = vec2(rand_f32() - 0.5, rand_f32() - 0.5);
+      var uv = (pos.xy + offset) / vec2f(f32(uniforms.width - 1u), f32(uniforms.height - 1u));
+
+      // Map `uv` from y-down (normalized) viewport coordinates to camera coordinates.
+      uv = (2. * uv - vec2(1.)) * vec2(aspect_ratio, -1.);
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL highlight
+      // Compute the scene-space ray direction by rotating the camera-space vector into a new
+      // basis.
+      let camera_rotation = mat3x3(uniforms.camera.u, uniforms.camera.v, uniforms.camera.w);
+      let direction = camera_rotation * vec3(uv, focus_distance);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
+      var ray = Ray(origin, direction);
+      ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [camera-rotation-matrix]: <kbd>[shaders.wgsl]</kbd> Ray direction rotated to camera basis]
+
+Once again, we need to pay attention to the required alignment on the CPU side. `u`, `v`, and `w`
+are declared as `vec3f` which must be aligned to an offset that's a multiple of 16. Since the size
+of `vec3f` is 12, we need to insert padding after each member to fix the alignment of the next
+member:
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+    ...
+    #[derive(Debug, Copy, Clone, Pod, Zeroable)]
+    #[repr(C)]
+    pub struct CameraUniforms {
+        origin: Vec3,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
+        _pad0: u32,
+        u: Vec3,
+        _pad1: u32,
+        v: Vec3,
+        _pad2: u32,
+        w: Vec3,
+        _pad3: u32,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+    }
+
+    impl Camera {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
+        pub fn look_at(origin: Vec3, look_at: Vec3, up: Vec3) -> Camera {
+            let w = (look_at - origin).normalized();
+            let u = w.cross(&up).normalized();
+            let v = u.cross(&w);
+            Camera {
+                uniforms: CameraUniforms {
+                    origin,
+                    _pad0: 0,
+                    u,
+                    _pad1: 0,
+                    v,
+                    _pad2: 0,
+                    w,
+                    _pad3: 0,
+                },
+            }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+        }
+
+        pub fn uniforms(&self) -> &CameraUniforms {
+            &self.uniforms
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [camera-basis-vectors-cpu]: <kbd>[camera.rs]</kbd> Computing the camera basis vectors]
+
+Finally, let's update the camera position and orientation to look towards the bottom of the small
+sphere from above:
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+    ...
+    impl PathTracer {
+        pub fn new(
+            device: wgpu::Device,
+            queue: wgpu::Queue,
+            width: u32,
+            height: u32,
+        ) -> PathTracer {
+            ...
+            // Initialize the uniform buffer.
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
+            let camera = Camera::look_at(
+                Vec3::new(0., 0.75, 1.),
+                Vec3::new(0., -0.5, -1.),
+                Vec3::new(0., 1., 0.),
+            );
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
+            let uniforms = Uniforms {
+                camera: *camera.uniforms(),
+                width,
+                height,
+                frame_count: 0,
+                _pad: 0,
+            };
+            ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [uniforms-padded]: <kbd>[render.rs]</kbd> `Uniforms` explicitly padded]
+
+
+  ![Figure [camera-reoriented]: New camera orientation](../images/img-25-camera-look-at.png)
 
                                (insert acknowledgments.md.html here)
 

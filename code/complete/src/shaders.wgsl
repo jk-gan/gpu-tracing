@@ -16,6 +16,9 @@ struct Uniforms {
 
 struct CameraUniforms {
   origin: vec3f,
+  u: vec3f,
+  v: vec3f,
+  w: vec3f,
 }
 
 struct Rng {
@@ -185,7 +188,10 @@ var<private> vertices: TriangleVertices = TriangleVertices(
   // Map `uv` from y-down (normalized) viewport coordinates to camera coordinates.
   uv = (2. * uv - vec2(1.)) * vec2(aspect_ratio, -1.);
 
-  let direction = vec3(uv, -focus_distance);
+  // Compute the scene-space ray direction by rotating the camera-space vector into a new
+  // basis.
+  let camera_rotation = mat3x3(uniforms.camera.u, uniforms.camera.v, uniforms.camera.w);
+  let direction = camera_rotation * vec3(uv, focus_distance);
   var ray = Ray(origin, direction);
   var throughput = vec3f(1.);
   var radiance_sample = vec3(0.);

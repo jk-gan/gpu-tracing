@@ -47,7 +47,11 @@ impl PathTracer {
             create_display_pipeline(&device, &shader_module);
 
         // Initialize the uniform buffer.
-        let camera = Camera::new(Vec3::new(0., -0.5, 1.));
+        let camera = Camera::look_at(
+            Vec3::new(0., 0.75, 1.),
+            Vec3::new(0., -0.5, -1.),
+            Vec3::new(0., 1., 0.),
+        );
         let uniforms = Uniforms {
             camera: *camera.uniforms(),
             width,
