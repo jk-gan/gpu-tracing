@@ -2984,12 +2984,12 @@ create two bind groups with the textures swapped and alternate those at render t
             // Bind group with view[0] assigned to binding 1 and view[1] assigned to binding 2.
             device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
-                layout: &layout,
+                layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
                         resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                            buffer: &uniform_buffer,
+                            buffer: uniform_buffer,
                             offset: 0,
                             size: None,
                         }),
@@ -3007,12 +3007,12 @@ create two bind groups with the textures swapped and alternate those at render t
             // Bind group with view[1] assigned to binding 1 and view[0] assigned to binding 2.
             device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
-                layout: &layout,
+                layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
                         resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                            buffer: &uniform_buffer,
+                            buffer: uniform_buffer,
                             offset: 0,
                             size: None,
                         }),

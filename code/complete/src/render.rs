@@ -244,12 +244,12 @@ fn create_display_bind_groups(
         // Bind group with view[0] assigned to binding 1 and view[1] assigned to binding 2.
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
-            layout: &layout,
+            layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &uniform_buffer,
+                        buffer: uniform_buffer,
                         offset: 0,
                         size: None,
                     }),
@@ -267,12 +267,12 @@ fn create_display_bind_groups(
         // Bind group with view[1] assigned to binding 1 and view[0] assigned to binding 2.
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
-            layout: &layout,
+            layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &uniform_buffer,
+                        buffer: uniform_buffer,
                         offset: 0,
                         size: None,
                     }),
