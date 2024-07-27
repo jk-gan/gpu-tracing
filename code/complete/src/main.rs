@@ -4,7 +4,7 @@
 use {
     anyhow::{Context, Result},
     winit::{
-        event::{Event, WindowEvent},
+        event::{Event, MouseScrollDelta, WindowEvent},
         event_loop::{ControlFlow, EventLoop},
         window::{Window, WindowBuilder},
     },
@@ -13,6 +13,8 @@ use {
 mod algebra;
 mod camera;
 mod render;
+
+use crate::{algebra::Vec3, camera::Camera};
 
 const WIDTH: u32 = 1600;
 const HEIGHT: u32 = 1200;
@@ -28,14 +30,26 @@ async fn main() -> Result<()> {
         .build(&event_loop)?;
 
     let (device, queue, surface) = connect_to_gpu(&window).await?;
-
     let mut renderer = render::PathTracer::new(device, queue, WIDTH, HEIGHT);
+    let mut camera = Camera::look_at(
+        Vec3::new(0., 0.75, 1.),
+        Vec3::new(0., -0.5, -1.),
+        Vec3::new(0., 1., 0.),
+    );
 
     event_loop.run(|event, control_handle| {
         control_handle.set_control_flow(ControlFlow::Poll);
         match event {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => control_handle.exit(),
+                WindowEvent::MouseWheel { delta, .. } => {
+                    let delta = match delta {
+                        MouseScrollDelta::PixelDelta(delta) => 0.001 * delta.y as f32,
+                        MouseScrollDelta::LineDelta(_, y) => y * 0.1,
+                    };
+                    camera.zoom(delta);
+                    renderer.reset_samples();
+                }
                 WindowEvent::RedrawRequested => {
                     // Wait for the next available frame buffer.
                     let frame: wgpu::SurfaceTexture = surface
@@ -46,7 +60,7 @@ async fn main() -> Result<()> {
                         .texture
                         .create_view(&wgpu::TextureViewDescriptor::default());
 
-                    renderer.render_frame(&render_target);
+                    renderer.render_frame(&camera, &render_target);
 
                     frame.present();
                     window.request_redraw();

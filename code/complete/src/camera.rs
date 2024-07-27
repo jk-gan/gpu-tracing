@@ -23,8 +23,8 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub fn look_at(origin: Vec3, look_at: Vec3, up: Vec3) -> Camera {
-        let w = (look_at - origin).normalized();
+    pub fn look_at(origin: Vec3, center: Vec3, up: Vec3) -> Camera {
+        let w = (center - origin).normalized();
         let u = w.cross(&up).normalized();
         let v = u.cross(&w);
         Camera {
@@ -43,5 +43,9 @@ impl Camera {
 
     pub fn uniforms(&self) -> &CameraUniforms {
         &self.uniforms
+    }
+
+    pub fn zoom(&mut self, displacement: f32) {
+        self.uniforms.origin = self.uniforms.origin + displacement * self.uniforms.w;
     }
 }

@@ -24,7 +24,7 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
      inkscape:zoom="0.74118287"
-     inkscape:cx="351.46522"
+     inkscape:cx="352.13982"
      inkscape:cy="414.20277"
      inkscape:window-width="1616"
      inkscape:window-height="981"
@@ -207,7 +207,7 @@
        style="font-size:42.6667px;font-family:Arial;-inkscape-font-specification:Arial;text-align:center;white-space:pre;shape-inside:url(#rect2-0);display:inline;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:1.88976;stroke-dasharray:none;stroke-opacity:1"><tspan
          x="397.83756"
          y="393.31112"
-         id="tspan1">u</tspan></text>
+         id="tspan6">u</tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.26458333,0,0,0.26458333,-68.210385,-1.2383893)"
@@ -215,9 +215,9 @@
        style="font-size:42.6667px;font-family:Arial;-inkscape-font-specification:Arial;text-align:center;white-space:pre;shape-inside:url(#rect2-0-2);display:inline;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-dasharray:none;stroke-opacity:1"><tspan
          x="417.00257"
          y="393.41477"
-         id="tspan3"><tspan
+         id="tspan11"><tspan
            style="font-style:italic"
-           id="tspan2">origin</tspan></tspan></text>
+           id="tspan10">origin</tspan></tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.26458333,0,0,0.26458333,-51.942375,-78.27581)"
@@ -225,19 +225,19 @@
        style="font-size:42.6667px;font-family:Arial;-inkscape-font-specification:Arial;text-align:center;white-space:pre;shape-inside:url(#rect2-0-2-2);display:inline;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-dasharray:none;stroke-opacity:1"><tspan
          x="445.4505"
          y="393.41477"
-         id="tspan5"><tspan
+         id="tspan13"><tspan
            style="font-style:italic"
-           id="tspan4">up</tspan></tspan></text>
+           id="tspan12">up</tspan></tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.26458333,0,0,0.26458333,74.430127,71.967299)"
        id="text2-5-4"
        style="font-size:42.6667px;font-family:Arial;-inkscape-font-specification:Arial;text-align:center;white-space:pre;shape-inside:url(#rect2-0-2-4);display:inline;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-dasharray:none;stroke-opacity:1"><tspan
-         x="406.32547"
+         x="409.88798"
          y="393.41477"
-         id="tspan7"><tspan
+         id="tspan15"><tspan
            style="font-style:italic"
-           id="tspan6">look at</tspan></tspan></text>
+           id="tspan14">center</tspan></tspan></text>
     <path
        style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0.810436;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
        d="m 95.796897,154.70897 3.830574,0.0537 -4.6e-4,-0.0614 z"
@@ -267,7 +267,7 @@
        style="font-size:42.6667px;font-family:Arial;-inkscape-font-specification:Arial;text-align:center;white-space:pre;shape-inside:url(#rect2-0-9);display:inline;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:1.88976;stroke-dasharray:none;stroke-opacity:1"><tspan
          x="394.29589"
          y="393.31112"
-         id="tspan8">w</tspan></text>
+         id="tspan16">w</tspan></text>
     <path
        style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0.810436;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
        d="m 127.53429,114.02784 3.83059,0.0537 -4.6e-4,-0.0614 z"
@@ -297,7 +297,7 @@
        style="font-size:42.6667px;font-family:Arial;-inkscape-font-specification:Arial;text-align:center;white-space:pre;shape-inside:url(#rect2-0-9-4);display:inline;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:1.88976;stroke-dasharray:none;stroke-opacity:1"><tspan
          x="399.03547"
          y="393.31112"
-         id="tspan9">v</tspan></text>
+         id="tspan17">v</tspan></text>
     <path
        style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0.810436;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
        d="m 109.63163,37.93767 3.83057,0.0537 -4.6e-4,-0.0614 z"
