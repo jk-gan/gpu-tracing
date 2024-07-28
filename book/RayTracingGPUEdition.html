@@ -2652,10 +2652,6 @@ running sums across frames:
         uniforms: Uniforms,
         uniform_buffer: wgpu::Buffer,
 
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
-        radiance_samples: wgpu::Texture,
-
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
         display_pipeline: wgpu::RenderPipeline,
     }
 
@@ -2706,9 +2702,6 @@ running sums across frames:
                 queue,
                 uniforms,
                 uniform_buffer,
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
-                radiance_samples,
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
                 display_pipeline,
             }
         }
@@ -2756,7 +2749,7 @@ We'll also create two texture objects for each binding and alternate their bindi
 with every frame, repeatedly swapping their  roles: the texture that was previously the write
 target provides the accumulated sums for the next frame, and vice versa.
 
-Start by changing the `radiance_samples` declaration to an array of 2 textures:
+Start by changing the type of `radiance_samples` to an array of 2 textures:
 
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
@@ -2769,10 +2762,6 @@ Start by changing the `radiance_samples` declaration to an array of 2 textures:
         uniforms: Uniforms,
         uniform_buffer: wgpu::Buffer,
 
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
-        radiance_samples: [wgpu::Texture; 2],
-
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
         display_pipeline: wgpu::RenderPipeline,
     }
 
@@ -2899,8 +2888,6 @@ create two bind groups with the textures swapped and alternate those at render t
         uniforms: Uniforms,
         uniform_buffer: wgpu::Buffer,
 
-        radiance_samples: [wgpu::Texture; 2],
-
         display_pipeline: wgpu::RenderPipeline,
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
         display_bind_groups: [wgpu::BindGroup; 2],
@@ -2958,7 +2945,6 @@ create two bind groups with the textures swapped and alternate those at render t
                 queue,
                 uniforms,
                 uniform_buffer,
-                radiance_samples,
                 display_pipeline,
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust highlight
                 display_bind_groups,

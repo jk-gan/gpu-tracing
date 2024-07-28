@@ -12,8 +12,6 @@ pub struct PathTracer {
     uniforms: Uniforms,
     uniform_buffer: wgpu::Buffer,
 
-    radiance_samples: [wgpu::Texture; 2],
-
     display_pipeline: wgpu::RenderPipeline,
     display_bind_groups: [wgpu::BindGroup; 2],
 }
@@ -71,7 +69,6 @@ impl PathTracer {
             queue,
             uniforms,
             uniform_buffer,
-            radiance_samples,
             display_pipeline,
             display_bind_groups,
         }
