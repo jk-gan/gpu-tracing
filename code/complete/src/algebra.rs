@@ -69,8 +69,8 @@ impl Vec3 {
     }
 }
 
-// Automatically generate operator overloads for all value and borrow type combinations, using
-// the same given code block as the body.
+// Macro to automatically declare operator overloads for all value and borrow type
+// combinations, using the same code block as the body.
 macro_rules! impl_binary_op {
     ($op:tt : $method:ident => (
            $lhs_i:ident : $lhs_t:path,

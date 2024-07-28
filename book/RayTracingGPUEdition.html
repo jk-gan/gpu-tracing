@@ -4038,7 +4038,7 @@ around. In order to reposition the camera with user input, we need a representat
 state that is shared between the CPU and GPU sides of the program.
 
 In our GPU code, we have relied on built-in vector algebra primitives (such as `vec3`) provided by
-WGSL. We need similar primitives on the CPU side as well, as they will come in handy to update
+WGSL. We need similar primitives on the CPU side, as they will come in handy to update
 camera parameters in response to input events. To that end, we'll be adding a new `algebra` module
 for linear algebra utilities:
 
@@ -4112,8 +4112,8 @@ for linear algebra utilities:
         }
     }
 
-    // Automatically generate operator overloads for all value and borrow type combinations,
-    // using the same code block as the body.
+    // Macro to automatically declare operator overloads for all value and borrow type
+    // combinations, using the same code block as the body.
     macro_rules! impl_binary_op {
         ($op:tt : $method:ident => (
                $lhs_i:ident : $lhs_t:path,
@@ -4213,9 +4213,17 @@ operations and binary operator overloads for component-wise arithmetic (+, -, *,
 The memory layout of a `Vec3` consists of three contiguous `f32`'s (taking up 12 bytes) which
 exactly matches the layout of the WGSL `vec3f` type.
 
+
+[^ch8-footnote1]: In Rust, operators get overloaded by implementing traits (`std::ops::Add`,
+`std::ops::Sub`, `std::ops::Mul`, `std::ops::Div`, etc). The operator traits are parameterized on
+value types (such as `fn add(self, rhs: RHS) -> Output` in `std::ops::Add`) and don't automatically
+extend to invocations on borrows. For example, `a + b`, where `a` and `b` are both `Vec3`, is
+different from `a + &b`, `&a + b`, and `&a + &b`. The `impl_binary_op` macro automatically implements
+the traits for all of these combinations for convenience.
+
 Uniforms and Alignment
 ----------------------
-Since we want to share state across the CPU and GPU sides, it makes sense to extend the uniform
+In order to share camera state across the CPU and GPU sides, it makes sense to extend the uniform
 buffer to hold the camera parameters. Let's define a new `CameraUniforms` structure that stores the
 camera position:
 
@@ -4299,10 +4307,10 @@ to contain all camera related code.
 The module defines two structs: `CameraUniforms` and `Camera`. `CameraUniforms` is going to contain
 only the state that will be shared with the GPU, while `Camera` is meant to be a higher level
 wrapper that can contain additional variables. For now, the only state is the camera origin so the
-contents are fairly simple.
+type definition is pretty bare bones.
 
-Finally, let's update our CPU-side `Uniforms` struct to match the GPU side by including
-`CameraUniforms`. We'll also reposition the camera origin to verify our changes:
+Let's update our CPU-side `Uniforms` struct to mirror the GPU side by including `CameraUniforms`.
+We'll also reposition the camera origin to verify our changes:
 
 <script type="preformatted">
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
@@ -4394,7 +4402,7 @@ Before our last change, the `Uniforms` struct had 4-byte alignment and occupied 
 
 We introduced the `CameraUniforms` structure, which has a single member of type `vec3f` and
 therefore 16-byte alignment. `vec3f` is 12 bytes in size, so the struct is _padded_ with 4 bytes
-do bring its size up to 16. While WGSL does this implicitly, we need to explicitly add padding on
+to bring its size up to 16. While WGSL does this implicitly, we need to explicitly add padding on
 the Rust side.
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
@@ -4424,9 +4432,10 @@ the Rust side.
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     [Listing [camera-uniforms-padded]: <kbd>[camera.rs]</kbd> `CameraUniforms` explicitly padded]
 
-We then added new member with type `CameraUniforms` to `Uniforms`. That increased the latter's
-alignment to 16 and brought its size up to 28 bytes. 28 is not a multiple of the new alignment and
-the next closest multiple is 32. Therefore we need to pad `Uniforms` with 4 additional bytes:
+We also introduce a new member of type `CameraUniforms` to the `Uniforms` struct. That increased the
+latter's alignment to 16 and brought its size up to 28 bytes. 28 is not a multiple of the new
+alignment and the next closest multiple is 32. Therefore we need to pad `Uniforms` with 4 additional
+bytes:
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
     ...
@@ -4465,17 +4474,10 @@ the next closest multiple is 32. Therefore we need to pad `Uniforms` with 4 addi
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     [Listing [uniforms-padded]: <kbd>[render.rs]</kbd> `Uniforms` explicitly padded]
 
-The padding is currently wasted space but we can make use of it in the future. Running the program
+The padding is currently wasted space but we will make use of it in the future. Running the program
 should now pass validation and render an image that looks like this:
 
   ![Figure [repositioned-camera-origin]: Camera origin repositioned](../images/img-24-camera-origin-repositioned.png)
-
-[^ch8-footnote1]: In Rust, operators get overloaded using traits (`std::ops::Add`, `std::ops::Sub`,
-`std::ops::Mul`, `std::ops::Div`, etc). The operator traits are parameterized on value types (such
-as `fn add(self, rhs: RHS) -> Output` in `std::ops::Add`) and don't automatically extend to
-invocations on borrows.For example, `a + b`, where `a` and `b` are both `Vec3`, is different from
-`a + &b`, `&a + b`, and `&a + &b`. The `impl_binary_op` macro automatically implements the traits
-for all of these combinations for convenience.
 
 [^ch8-footnote2]: The alignment and size requirements for WGSL types are defined at
 https://www.w3.org/TR/WGSL/#alignment-and-size.
@@ -4490,10 +4492,10 @@ aligned with the camera orientation within the scene coordinate system.
 
 We can achieve this with a _change of basis_. The 3 coordinate axes of a
 3D (Euclidean) coordinate space can be defined in terms of 3 basis vectors that are orthogonal
-to each other, for example our scene coordinates are relative to
+to each other; for example, our scene coordinates are relative to
 $x = \begin{bmatrix} 1 \\ 0 \\ 0 \end{bmatrix}$,
 $y = \begin{bmatrix} 0 \\ 1 \\ 0 \end{bmatrix}$,
-$z = \begin{bmatrix} 0 \\ 0 \\ 1 \end{bmatrix}$. Suppose we define the basis vectors vectors of
+$z = \begin{bmatrix} 0 \\ 0 \\ 1 \end{bmatrix}$. Suppose we define the basis vectors of
 the camera coordinate space as $\vec{\textbf{u}}$ ($x$-coordinate pointing to the right),
 $\vec{\textbf{v}}$ ($y$-coordinate pointing up), and $\vec{\textbf{w}}$ ($z$-coordinate pointing
 forward, towards the viewport). We can then transform a ray direction vector from camera coordinates
@@ -4704,24 +4706,24 @@ parameter:
 - `MouseScrollDelta::PixelDelta`: represents the delta in "number of pixels", typically generated by
   a touch screen or trackpad.
 - `MouseScrollDelta::LineDelta`: represents the delta in terms of "lines in a text document",
-  typically generated by the discrete "clicks" of a mouse scroll wheel.
+  typically corresponding to the discrete "clicks" of a mouse scroll wheel.
 
-The variant you get depends on your input device. It usually makes sense to apply a scaling factor
+The variant you receive depends on your input device. It usually makes sense to apply a scaling factor
 to this delta, since using it directly as the displacement amount is likely to result in a very
 large distance value in scene coordinates. I use factors of 0.001 and 0.1 for the two events
 respectively, though the "ideal" factor may depend on your device and system settings. The `delta`
-value is _signed_, with positive and negative values corresponding to scrolling down and up, which
+value is _signed_, with positive and negative values corresponding to scrolling up and down, which
 translates nicely to our `displacement` parameter.
 
 We are going to handle the mouse scroll event in our main event loop. The event loop code currently
 doesn't have direct access to the `Camera` object, as it is internal to the `PathTracer`
 constructor. `PathTracer::new` currently discards the camera object, retaining only the uniform data
 as the camera state has so far been static. In addition to retaining the camera state, we also need
-a way to update the camera uniforms for any changes to take effect before a frame gets rendered.
+a way to update the uniforms buffer for changes to take effect before rendering a frame.
 
 I'm going to suggest a simple refactor: let's decouple the `Camera` construction from the
-`PathTracer` object and instead pass the camera as an argument to `PathTracer::render_frame`. We can
-always update the camera uniforms before rendering an individual frame:
+`PathTracer` object and instead pass the camera as an argument to `PathTracer::render_frame`. We'll
+simply always update the camera uniforms before rendering an individual frame:
 
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Rust
@@ -4851,8 +4853,8 @@ and forth, pausing at different distances for a few seconds:
 This is the same effect that we saw in Figure [temporal-blur-effect], which is caused by temporal
 accumulation. Moving the camera effectively invalidates all the samples we have collected up to that
 point, as our cached radiance values only make sense for a specific camera position. The simplest
-thing we can do is to discard old samples after we mutate the camera. Luckily, this is pretty easy
-to do: the code we added in Listing [sample-accumulation] already ignores old samples for the
+thing we can do is to discard old samples whenever we mutate the camera. Luckily, this is pretty
+easy to do: the code we added in Listing [sample-accumulation] already ignores old samples for the
 initial value of `uniforms.frame_count`. So all we need to do is reset the frame count:
 
 
@@ -4897,7 +4899,7 @@ initial value of `uniforms.frame_count`. So all we need to do is reset the frame
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     [Listing [mouse-wheel-reset-samples]: <kbd>[main.rs]</kbd> Reset samples on camera zoom]
 
-Now you should see no artifacts as you zoom in and out:
+Now you should see no artifacts when you zoom in and out:
 
   ![Figure [zooming-in-and-out]: (video) Zooming in and out
    ](../images/vid-02-zooming-in-and-out.mp4 autoplay muted loop)
