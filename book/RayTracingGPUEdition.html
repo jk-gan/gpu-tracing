@@ -3383,10 +3383,6 @@ to our previous 16-sample AA:
   ![Figure [randomized-ssaa-image]: Randomized sub-pixel supersampling @ 400x300
    ](../images/img-15-random-subpixel-samples.png height="500px" class="pixel")
 
-We have successfully employed random sampling to compute the average color of visible surfaces
-within a single pixel. Next, we are going to apply the same tools to approximate the radiance that
-flows into the pixel from the scene.
-
 [^ch6-footnote10]: Xorshift is a so-called _linear congruential generator_. The random offsets
 generated with xorshift follow a _white noise_ pattern in that they appear to be "purely random":
 the sample points may appear clumped together in some places and have large gaps in others. A more
@@ -3396,174 +3392,32 @@ our large number of samples.
 
 Path Tracing
 ====================================================================================================
-The human visual system relies on our ability to detect and process light. What we perceive as
-color, shadows, transparency, reflections, and many other visual phenomena are the result of complex
-interactions of light. If we want to achieve realism, it makes sense to base our computations on the
-real-world physics of light.
+What we perceive as color, shadows, transparency, reflections, and many other visual phenomena are
+the result of complex interactions of light. If we want to achieve some amount of realism, it makes
+sense to base our computations on the real-world physics of light.
 
-What comes next is a quick refresher of the basic theory behind physically based rendering. While
-it's somewhat dense in mathematical formalism, the concepts form the basis for modern rendering.
-You don't need a perfect grasp of the subject but the information will help explain some of the
-logic we'll add later on.
+That said, it's not necessary to simulate electromagnetic wave interactions to render a visually
+pleasing image. What we mainly care about is how light travels and what happens when it falls
+on surfaces in the scene. We'll adhere to a relatively simple model with the following assumptions:
 
-After the refresher, we'll build the core of the path tracing algorithm and add a basic collection
-of materials.
+- Light travels in straight lines represented as rays.
 
-  ![Figure [cornell-box-preview]: A path traced rendering of the "Cornell Box", showcasing indirect lighting, soft shadows, and refraction caustic.
-   ](../images/img-16-cornell-box-preview.png)
+- A ray transports some amount of light energy, called _radiance_.
 
-Physically Based Rendering
---------------------------
-The basic idea is that different materials scatter light differently. For example, light arriving at
-matte wall paint generally scatters in all directions. A perfectly polished metal surface acts like a
-mirror and reflects all light in a specific direction. A transparent glass surface refracts and
-transmits light through, though it may also act like a mirror when viewed at a certain angle.
+- Light gets scattered when it hits a surface. The surface absorbs some of the radiance and scatters
+  the rest towards a new direction, represented by a new ray.
 
-Some materials are emissive and radiate visible light and act as _direct_ light sources.
-Non-emissive objects are also capable of illuminating other surfaces _indirectly_ by reflecting light
-onto them. Most objects typically absorb some frequencies of the light they receive and reflect
-others, imparting what we perceive as color.
+- A sequence of connected rays form a _light transport path_. All light transport paths originate
+  at a light source.
 
   ![Figure [light-paths-in-a-room]: The various paths that light rays in a room may take before they reach the camera.
    ](../images/fig-09-light-paths-overview.svg)
 
-After we cast a camera ray and find an intersection at point $X$ on a surface, we want a measurement
-of the radiance arriving from $X$ in the direction of the camera (opposite the ray direction).
-Radiance is only meaningful in the context of a scattering surface, so in order to be physically
-accurate, we'll imagine $X$ is a tiny patch of surface instead of a dimensionless point.
-
-If the surface is on an object that emits light then we could return some value related
-to the power of its emission. If the surface material is not emissive then it should only be visible
-by scattering light from other sources. The amount scattered in a given direction depends on
-the material type. In order to compute the outgoing radiance, we need to figure out how much
-energy is arriving at this tiny patch of surface from all directions (known as irradiance) and the
-fraction of it that gets scattered specifically in the direction we're interested in.
-
-This overall computation has been formalized in the computer graphics literature in a formula called
-the _rendering equation_:[^ch7-footnote1]
-
-$$ \Lo(X, \omega_o) = \Le(X, \omega_o) + \int_\Omega \Li(X, \omega_i) ~ f(X, \omega_i, \omega_o) ~ | \vec{\mathbf{N}} \cdot \omega_i | ~ d\omega_i $$
-
-$L(X, \omega)$ is a function that returns the radiance arriving or departing at $X$ along the
-direction $\omega$. The $L_o$/$L_i$ and $\omega_o$/$\omega_i$ variants distinguish
-outgoing and incident directions. In this formulation, the direction of the camera ray would be
-$-\omega_o$.
-
-The first term $L_e$ represents the _emitted_ radiance at the surface. For instance the lamp in the
-Cornell box and the sky should both return a non-zero value since they emit visible light. The
-second term (the integral) represents the total radiance _scattered_ by the surface towards
-$\omega_o$. Let's break down the integral:
-
-$\Omega$ represents the entire range of directions from which light can arrive at $X$. It is
-usually represented as a hemisphere centered at $X$ oriented towards the surface normal
-$\vec{\mathbf{N}}$ for reflective surfaces (more generally a sphere for surfaces that can both
-reflect and transmit light). It is measured as a solid angle and since there are infinitely many
-directions that light can arrive from, we integrate over infinitely many differential solid angles
-$d\omega_i$ (hence $\int_\Omega ... d\omega_i$). In code, we are going to represent $\omega_i$ with
-a ray direction but we are going to pretend it is a cone with a tiny solid angle subtending another
-infinitesimal surface on some other object that illuminates it.
-
-  ![Figure [brdf-hemisphere]: The integration interval $\Omega$ and the differential solid angle $d\omega$. Radiance is defined as power arriving at $X$ via $d\omega$.
-   ](../images/fig-10-brdf-hemisphere.svg)
-
-$L_i(X, \omega_i)$ inside the integrand measures the incident radiance at $X$ from $\omega_i$.
-Remember that we earlier defined _radiance_ as "the energy carried by light through space,
-restricted to an instant in time, emanating from a unit patch of surface towards another." To match
-the equation, we can be a bit more precise and define it as energy per time per differential surface
-area measure ($X$) per differential solid angle measure ($d\omega_i$).
-
-The last factor in the integrand, $| \vec{\mathbf{N}} \cdot \omega_i |$, is there to account for
-_Lambert's projected area law_ (also known as the _cosine law_). The law is based on the observation
-that the perceived area of a surface scales with the viewing angle. The area appears smaller at
-grazing angles compared to head-on, and it is exactly $0$ when the view direction
-is tangent to the surface. If $\theta$ is the angle between the viewing direction and the surface
-normal, then the scaling factor is equal to $cos ~ \theta$. The same value is given by the dot
-product of the two vectors (assuming they both have unit length).
-
-![Figure [lambert-photometria]: When viewed at an angle, the area $AB$ gets projected onto $AE$, which is smaller. This drawing is from Figure 1 in Lambert's 1760 work "*Photometria*" [#Lambert1760].
-   ](../images/img-17-lambert-cosine-law-photometria.png)
-
-At oblique angles, the projected area of $X$ appears smaller relative to $\omega_i$, so
-$L_i(X, \omega_i)$ is scaled by $| \vec{\mathbf{N}} \cdot \omega_i |$. This ensures that all
-incident radiance measurements are relative to the same unit surface area. Thus, the integral
-$\int_\Omega \Li(X, \omega_i) ~ | \vec{\mathbf{N}} \cdot \omega_i | ~ d\omega_i$ yields the
-irradiance at $X$.
-
-We are interested in the amount of radiance scattered towards $\omega_o$. This is given by
-$f(X,\omega_i,\omega_o)$. This function represents a so-called _scattering distribution_ for the
-surface material. Specifically, it yields the fraction of the radiance arriving from $\omega_i$
-that gets scattered towards $\omega_o$ at $X$. This is generally referred to as a BSDF (for
-_Bi-directional Scattering Distribution Function_) and sometimes BRDF when the material only
-supports reflections (for _Bi-directional Reflectance Distribution Function_). It is
-bi-directional because the function has some symmetry, i.e. works the same way if you swap
-$\omega_i$ with $\omega_o$.
-
-The BSDF embeds absorption. For example, the BSDF for a surface that absorbs all arriving
-radiance and reflects nothing would yield $0$ in all directions. The BSDF for a
-perfect mirror is $0$ in all directions except at a very specific direction corresponding to a
-mirror reflection of $\omega_i$ across $\vec{\mathbf{N}}$. In the equation, the BSDF acts as a
-weight for a given value of $\Li$ and it integrates over $\Omega$ to at most 1.[^ch7-footnote2]
-
-The equation nicely summarizes the core computation and supports any type of surface material that
-satisfies the requirements of a BSDF. The downside is that it's not really computable without some
-kind of approximation. The integral is over infinitely many patches of surfaces and the function
-itself appears inside the integral, involving infinitely many nested integrals.
-
-People have developed numerous techniques over the last half-century to approximate the equation.
-The specific approach we're looking at, path tracing, numerically solves the integral using a
-so called _Markov Chain Monte Carlo_ algorithm. This method relies on evaluating the integrand
-over a series of random samples and taking their average. For a function $f(x)$, the Monte Carlo
-estimator of its integral over interval $A$ using $N$ discrete samples is given as follows:
-
-$$ \int_A f(x) ~ dx \approx \dfrac{1}{N}\sum_{\bar{\mathbf{x}}}^N \dfrac{f(\bar{\mathbf{x}})}{\rho(\bar{\mathbf{x}})} $$
-
-where $\bar{\mathbf{x}}$ is a random variable and $\rho$ gives the likelihood of choosing $\bar{\mathbf{x}}$ --
-a probability distribution. If we apply this to the rendering equation, we get:
-
-$$ \Lo(X, \omega_o) \approx \Le(X, \omega_o) + \dfrac{1}{N}\sum_{j}^N \dfrac{\Li(X, \omega_j) ~ f(X, \omega_j, \omega_o) ~ | \vec{\mathbf{N}} \cdot \omega_j |}{\rho(\omega_j)} $$
-
-Expanding $\Li$, we end up with
-
-$$ L_{Xe} + \dfrac{1}{N}\sum_{j}^N \dfrac{f_{Xj} ~ | \vec{\mathbf{N}} \cdot \omega_j |}{\rho_X(\omega_j)} \left[L_{Ye} + \dfrac{1}{N}\sum_{k}^N \dfrac{f_{Yk} ~ | \vec{\mathbf{N}} \cdot \omega_k |}{\rho_Y(\omega_k)} \left[L_{Ze} + \dfrac{1}{N}\sum_{l}^N \dfrac{f_{Zl} ~ | \vec{\mathbf{N}} \cdot \omega_l |}{\rho_Z(\omega_l)} ~ ...\right]\right]$$
-
-I took some liberties with the notation here to keep things concise. To explain this computation in
-terms of ray tracing: first find an intersection on some surface patch $X$. From there, pick $N$
-random directions using a probability distribution derived from the surface material of $X$. Cast
-new rays in those directions and repeat the process for every intersection $Y$, finding the next set
-of surface patches $Z$, and so on. Every sequence of intersections connecting unique surface patches
-($X_j$, $Y_k$, $Z_l$) forms a _light transport path_ (in a graph of infinitely many paths). As it
-turns out, it's possible to sample the graph one path at a time and eventually converge to the
-correct result, which forms the basis of the path tracing algorithm. The radiance from a sampled
-path formed by surface patches $X_j$, $Y_k$, and $Z_l$ connected by rays $\vec{\mathbf{v}}_j,
-\vec{\mathbf{v}}_k, \vec{\mathbf{v}}_l$, etc. can be computed as:
-
-$$ L_{Xe} + \dfrac{f_{X} ~ | \vec{\mathbf{N}} \cdot \vec{\mathbf{v}}_j |}{\rho_X(\vec{\mathbf{v}}_j)} \left[L_{Ye} + \dfrac{f_{Y} ~ | \vec{\mathbf{N}} \cdot \vec{\mathbf{v}}_k |}{\rho_Y(\vec{\mathbf{v}}_k)} \left[L_{Ze} + \dfrac{f_Z ~ | \vec{\mathbf{N}} \cdot \vec{\mathbf{v}}_l |}{\rho_Z(\vec{\mathbf{v}}_l)} ~ ...\right]\right]$$
-
-In other words, we multiply the computed radiance by $ \dfrac{f(X, \omega_j, \omega_o) ~ | \vec{\mathbf{N}} \cdot \omega_j |}{\rho(\omega_j)} $
-at every intersection. Each multiplication will either reduce the radiance by
-some amount (meaning some of the light got absorbed) or leave it intact (meaning 100% transmission).
-
-That covers the basics of the underlying theory. This mathematical derivation may feel like
-a bunch of fancy formalism but it is useful in two ways. First, it explains why randomly sampling
-the scene yields a correct image at all and provides a framework for different sampling strategies.
-Second, it defines the interface for implementing a material: $f$ and $\rho$. We can model many real
-materials by choosing a good approximate BSDF and a BSDF PDF (for _Probability Distribution Function_).
-
-There's a lot I skipped past here but if you're interested in learning more about the subject, I
-highly recommend reading [The Graphics Codex](https://graphicscodex.com/app/app.html) [#McGuire2024GraphicsCodex].
-It is an excellent reference for a range of topics related to physically-based rendering and light transport.
-I also recommend [Ray Tracing: The Rest Of Your Life](RTTROYL) which is a good introduction to
-Monte Carlo integration and sampling techniques.
-
-
-[^ch7-footnote1]: Two very similar forms of the same equation were simultaneously published in 1986 in [#Kajiya86] and [#Immel86]. The Kajiya equation is an
-integral over all mutually visible pairs of surfaces that connect a light path while the Immel formulation is over solid angles of scattering directions. The one presented in this book
-is closer to the latter but the two equations essentially model the same thing.
-
-[^ch7-footnote2]: The integral of the BSDF can be less than $1$ since the material can absorb light
-but it should never be greater than $1$ since that would mean that the material is scattering off
-more energy than it receives. That would violate conservation of energy, a fundamental law of
-physics.
+There are infinitely many transport paths in a scene. The paths that contribute to the
+rendered image are the ones that eventually arrive at the camera, so we trace a light transport path
+_backwards_, starting at a camera pixel. When we find an intersection with a surface in the scene,
+we cast a new ray in the scattering direction based on the properties of the surface. We repeat the
+process until a ray intersects a light source.
 
 Path Tracing Loop
 -----------------
@@ -3648,22 +3502,23 @@ new function responsible for traversing the scene and finding an intersection, c
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     [Listing [intersect-scene]: <kbd>[shaders.wgsl]</kbd> The intersect_scene function]
 
-A second new function, called `scatter`, will be responsible for evaluating the surface material. It is
-going to return two values: an attenuation factor that represents the fraction of scattered radiance
-and a ray direction ($\omega_i$) sampled according to the BSDF. The attenuation factor effectively
-corresponds to the $ \dfrac{f(X, \omega_i, \omega_o) ~ | \vec{\mathbf{N}} \cdot \omega_i |}{\rho(\omega_i)} $
-term from the rendering equation. We store it as a `vec3f` since we're computing a separate radiance
-value for each color channel.[^ch7-footnote3]
+A second new function, called `scatter`, will be responsible for evaluating the surface material.
+For now it returns two values: an attenuation factor that represents the fraction of scattered
+radiance and a scattering direction. We store the attenuation factor as a `vec3f` since
+we're computing a separate radiance value for each color channel.[^ch7-footnote3]
 
-Our rays originate from the camera and trace the transport path _backwards_ towards light sources,
+Our rays originate from the camera and trace the transport path backwards towards light sources,
 so when we call `scatter` we already know the scattering direction. In that sense "scatter" may
-feel like a misnomer (as it computes the inverse). Remember that a BSDF is bi-directional and
-follows the same rules in both incident and outgoing light directions. Our `scatter` function works
-the same way and allows the `input_ray` parameter to be either an incident or a scattered light
-direction.
+feel like a misnomer (as it computes the opposite). This doesn't really make a difference: as we'll
+find out later, the incident and outgoing light directions are interchangeable. The surface
+scattering functions that we will implement are all going to be _bi-directional_, i.e. work the same
+way in either direction. As such, our `scatter` function allows the `input_ray` parameter to be
+either an incident or a scattered light direction.
 
-Let's make the scattering function reflect the ray around the normal, just like a mirror. We can use
-a handy shader instrinsic called `reflect` to compute the reflection vector:
+Let's make the scattering function reflect the ray around the normal vector like a perfect mirror.
+The direction of a reflected ray given an incident ray direction and a surface normal is given by
+_Snell's Law_. Luckily, there is a handy shader instrinsic called `reflect` that can compute this
+for us:
 
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
@@ -3695,12 +3550,14 @@ a handy shader instrinsic called `reflect` to compute the reflection vector:
 
 
 The returned attenuation factor of $0.4$ means that the material absorbs 60% of the incoming
-radiance (in all color channels) and scatters the rest. The last equation from
-Section [physically based rendering] is expressed in a recursive form but WGSL doesn't allow any
-form of recursion (GPUs generally don't support it). That's not a huge issue since we can calculate
-it using a loop instead. We'll iterate forward, storing the product of attenuation values
-separately and only factor it into the computed radiance when we encounter a light source (which is
-just the sky for now):
+radiance (in all color channels) and scatters the rest. Logically, we compute this by multiplying
+the transported radiance by the attenuation factor at every intersection. We don't actually
+know the radiance value until we reach light sources but we can compute the total attenuation and
+the transported radiance separately.
+
+We'll write a loop that traces a path, generating rays as it finds intersections. We'll accumulate
+the product of attenuation factors in a `throughput` variable and multiply that by the radiance
+emitted by any light source that we encounter (which is just the sky for now):
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WGSL
     ...
@@ -3760,15 +3617,15 @@ just the sky for now):
     [Listing [intersect-scene]: <kbd>[shaders.wgsl]</kbd> The intersect_scene function]
 
 `throughput` starts out as $1$ (meaning no radiance has been absorbed). We also impose an artificial
-limit on the length of a sampled path to prevent looping forever if a path never encounters a light
-source  (which can happen with certain types of geometry). Running this program should produce this
+limit on the length of a path to prevent looping forever if we never encounter a light
+source (which can happen with certain types of geometry). Running this program should produce this
 image:
 
   ![Figure [invalid-scatter-with-shadow-acne]: Validating the path tracing loop (with shadow acne)
    ](../images/img-18-mirror-reflection-with-shadow-acne.png)
 
 We can see some reflections but there are some nasty circular bands. This artifact (called
-"shadow acne" or "self-shadowing") is caused by the limited (and quantized) precision in herent in
+"shadow acne" or "self-shadowing") is caused by the limited (and quantized) precision inherent to
 floating point arithmetic. Sometimes the computed intersection point doesn't fall precisely on the
 sphere surface, which can cause the new ray (originating from that point) to re-intersect the sphere.
 
@@ -3816,8 +3673,8 @@ offset ($\epsilon$ or _epsilon_):
     [Listing [intersect-scene]: <kbd>[shaders.wgsl]</kbd> The intersect_scene function]
 
 This code considers both `t1` and `t2` as `t2` (the farther point) could be a valid intersection if
-the ray resulted from a surface refraction (e.g. for a glass-like material). Following this change,
-the rendering should look like this:
+the ray resulted from a surface _refraction_ (e.g. for a glass-like material). Following this
+change, the rendering should look like this:
 
   ![Figure [shadow-acne-fixed]: Validating the path tracing loop
    ](../images/img-19-mirror-reflection-no-acne.png)
@@ -3836,7 +3693,7 @@ However, the reflections of both spheres become nearly invisible after only thre
 
 This is because the surface texture expects pixel values to be _gamma encoded_. Our eyes are more
 sensitive to changes in dark tones than they are to similar changes in bright tones. Given that
-we only have a fixed range to represent pixel's luminance ($\[0, 1\]$), it is more efficient (in
+we only have a fixed range to represent pixel's luminance ($[0, 1]$), it is more efficient (in
 terms of storage) to allocate a bigger numerical range for smaller radiance values. This is how
 digital images usually get stored and virtually all displays apply _gamma correction_ while
 converting pixel values to light.[^ch7-footnote4]
@@ -4834,7 +4691,7 @@ Now, run this code and use your trackpad or mouse wheel to scroll up and down. Y
 movement but you should also see some "smudging" or "ghosting". This is what I get if I scroll back
 and forth, pausing at different distances for a few seconds:
 
-  ![Figure [smuged-zoom]: Smudged zoom frames](../images/img-26-smudged-zoom.png)
+  ![Figure [smuged-zoom]: Ghosts of zoom levels past](../images/img-26-smudged-zoom.png)
 
 This is the same effect that we saw in Figure [temporal-blur-effect], which is caused by temporal
 accumulation. Moving the camera effectively invalidates all the samples we have collected up to that
